@@ -2,11 +2,8 @@
 
 ## Repositories
 
-- [PNM QEMU](https://github.samsungds.net/SAITPublic/PNMqemu)
-- [PNM Linux](https://github.samsungds.net/SAITPublic/PNMlinux)
-- [PNM Library](https://github.samsungds.net/SAITPublic/PNMLibrary)
-- [PNM PyTorch](https://github.samsungds.net/SAITPublic/PNMpytorch)
-- [PNM DLRM](https://github.samsungds.net/SAITPublic/PNMdlrm)
+- [PNM Library](https://github.samsungds.net/SAITPublic/PNMLibrary/PNMLibrary)
+- [PNM patches](https://github.samsungds.net/SAITPublic/PNMLibrary/patches)
 
 ## PNM QEMU
 
