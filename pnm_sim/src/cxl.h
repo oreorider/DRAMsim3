@@ -9,7 +9,7 @@
 
 namespace dramsim3 {
 
-#define CXL_LATENCY 0 //FIXME real CXL_LATENCY (cycle)
+#define CXL_LATENCY 7 // Placeholder
 
 class CXL {
    public:

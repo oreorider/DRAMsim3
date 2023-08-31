@@ -186,12 +186,9 @@ void PNM::WriteConfigRegister(Transaction trans) {
                               % psum_offset.size();
 
 #ifdef DEBUG_PRINT
-            std::cout << clk_ << " sls exec enable " 
-                      << channel_id_ << "  "
-                      << num_write_inst << "  "
+            std::cout << clk_ << "::CH"
+                      << channel_id_ << "::SLS_EXEC_ENABLED"
                       << std::endl;
-            num_input = 0;
-            num_weight = 0;
 #endif
         }
     }
@@ -330,9 +327,9 @@ void PNM::ScheduleInstruction() {
     if (it->second.trace_end == 1){
         // program_cout == num_write_inst
 #ifdef DEBUG_PRINT
-        std::cout << "trace_end: " 
-                  << program_count << " " 
-                  << num_write_inst << std::endl;
+        std::cout << clk_ << "::CH"
+                  << channel_id_ << "::ScheduleInstruction END"
+                  << std::endl;
 #endif
         num_read_inst = program_count;
         program_count = -1;

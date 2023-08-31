@@ -8,7 +8,7 @@
 #include "controller.h"
 
 namespace dramsim3 {
-#define PNM_PSUM_READ_LATENCY 0 // FIXME will be estimated in board
+#define PNM_PSUM_READ_LATENCY 14 // Placeholder
 
 class AddrDecoder {
    public:
