@@ -39,7 +39,7 @@ Download Ubuntu 22.04 server image.
 ### Run PNM QEMU
 
 ```
-cd <PNMSimulator_path>/scripts_real_app_mode
+cd <PNMDRAMsim3_path>/scripts_real_app_mode
 bash run_qemu.sh
 ```
 
@@ -49,14 +49,14 @@ Change `CPU_PARAM`.
 ### Install Ubuntu by Using VNC
 
 ```
-cd <PNMSimulator_path>/scripts_real_app_mode
+cd <PNMDRAMsim3_path>/scripts_real_app_mode
 bash vnc_qemu.sh
 ```
 
 ### Access QEMU with SSH
 
 ```
-cd <PNMSimulator_path>/scripts_real_app_mode
+cd <PNMDRAMsim3_path>/scripts_real_app_mode
 bash ssh_qemu.sh
 ```
 
@@ -241,13 +241,13 @@ pnm-trace-file off
 ## Trace Converter
 
 ```
-cd <PNMSimulator_path>/scripts_real_app_mode
+cd <PNMDRAMsim3_path>/scripts_real_app_mode
 python3 trace_conv.py pnm_trace-1.txt > converted.trc
 ```
 
 ## Run with Real Application Trace
 
 ```
-cd <PNMSimulator_path>/scripts_real_app_mode
+cd <PNMDRAMsim3_path>/scripts_real_app_mode
 bash run_pnm_sim_real_app_mode.sh
 ```
