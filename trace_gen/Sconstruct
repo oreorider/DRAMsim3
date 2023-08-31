@@ -1,0 +1,37 @@
+import os
+import socket
+
+num_cpu = int(os.environ.get('NUM_CPU',16))
+SetOption('num_jobs', num_cpu)
+print ("running with -j{}".format(GetOption('num_jobs')))
+
+AddOption('--debug_build', action='store_true', help='debug build', default=False)
+
+cpp_defines = []
+cpp_flags   = '-std=c++11 -Wall'
+ld_flags    = '-std=c++11 -Wall'
+
+if GetOption('debug_build'):
+    cpp_defines.append("DEBUG")
+    cpp_flags += ' -O2 -g'
+    ld_flags  += ' -O2 -g'
+else:
+    cpp_flags += ' -O2 -g'
+    ld_flags  += ' -O2 -g'
+
+
+env = Environment(CXXFLAGS = cpp_flags,     \
+                  LINKFLAGS = ld_flags,     \
+                  CPPDEFINES = cpp_defines)
+env.VariantDir('./bin', './', duplicate=0)
+
+program_name = "trace_gen"
+source  = [Glob('bin' + '/*.cpp')],
+CPPPATH = [Dir('#').abspath, 'include/'],
+LIBPATH = ['.'],
+LIBS    = ['boost_regex', 'boost_program_options']
+
+
+
+env.Program(program_name, source=source,
+            CPPPATH=CPPPATH, LIBPATH=LIBPATH, LIBS=LIBS)
