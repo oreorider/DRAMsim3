@@ -34,6 +34,9 @@ fs_trace_r_p = re.compile("READ addr: ([0-9a-z]+), size: ([0-9]+)")
 # set 0xcafe
 is_set = [False for i in range(CH_NUM)]
 
+# simulator sets when it's done 0xfffffff
+is_sim_done = [False for i in range(CH_NUM)]
+
 # for debug
 cnt_write_inst = [0 for i in range(CH_NUM)]
 cnt_read_psum = [0 for i in range(CH_NUM)]
@@ -68,6 +71,7 @@ class Address:
 
 def trace_conv(fs_addr, fs_size, fs_val, ch, is_write):
     global is_set
+    global is_sim_done
     global CLK
     global trace_list
 
@@ -78,13 +82,15 @@ def trace_conv(fs_addr, fs_size, fs_val, ch, is_write):
                 trace_list.append(hex(PS_CFGR_BASE[ch]) + " MFENCE " + str(CLK))
                 CLK += CLK_INTERVAL
             is_set[ch] = False
-        elif fs_addr == FS_CFGR_BASE + 0x40:
+        elif fs_addr == FS_CFGR_BASE + 0x40 and fs_val != 0:
             conv_cfgr(ch, fs_addr)
+        elif fs_addr == FS_CFGR_BASE + 0x444:
+            is_sim_done[ch] = True if fs_val == 0xffffffff else False
         """
         else:
             sys.stdout.write("[debug] Don't care\n")
         """
-    elif (is_set[ch]):
+    elif (is_sim_done[ch]):
         if fs_addr >= FS_PSUM_BASE and fs_addr < FS_PSUM_BASE + BUF_SIZE:
             conv_psum(ch, fs_addr)
         """
