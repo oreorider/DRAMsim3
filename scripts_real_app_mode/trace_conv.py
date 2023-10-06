@@ -187,18 +187,19 @@ def conv_data_addr(fs_data_addr):
 
     addr.ra = (fs_data_addr >> 34) & 0x1
 
-    addr.bg = ((fs_data_addr >> 17) & 0x1) << 1
-    addr.bg += (fs_data_addr >> 6) & 0x1
+    addr.bg = ((fs_data_addr >> 13) & 0x1) << 1
+    addr.bg += (fs_data_addr >> 12) & 0x1
 
-    addr.ba = (fs_data_addr >> 18) & 0x3
+    addr.ba = (fs_data_addr >> 19) & 0x3
     
     addr.ro = ((fs_data_addr >> 29) & 0x1f) << 12
     addr.ro += ((fs_data_addr >> 21) & 0x7f) << 5
     addr.ro += ((fs_data_addr >> 28) & 0x1) << 4
-    addr.ro += ((fs_data_addr >> 20) & 0x1) << 3
-    addr.ro += ((fs_data_addr >> 14) & 0x1)
+    addr.ro += ((fs_data_addr >> 11) & 0x1) << 3
+    addr.ro += ((fs_data_addr >> 8) & 0x7)
 
-    addr.co = (fs_data_addr >> 3) & 0x3ff
+    addr.co = ((fs_data_addr >> 14) & 0x1f) << 5
+    addr.co += (fs_data_addr >> 3) & 0x1f
 
     ps_data_addr = addr.ro << ps_ch_pos
     ps_data_addr = addr.ra << ps_ra_pos
