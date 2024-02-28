@@ -123,7 +123,7 @@ void Config::InitDRAMParams() {
     use_pnm                     = reader.GetBoolean("PNM", "use_PNM", true);
 
     instruction_buffer_size     = GetInteger("PNM", "instruction_buffer_size",
-                                                    256*1024);
+                                                    INST_BUFFER_BYTE_SIZE);
     psum_buffer_size            = GetInteger("PNM", "psum_buffer_size",
                                                     256*1024);
     sparse_feature_size         = GetInteger("PNM", "sparse_feature_size", 16);
@@ -133,6 +133,29 @@ void Config::InitDRAMParams() {
     instruction_double          = reader.GetBoolean("PNM", "instruction_double",
                                                            false);
     psum_double                 = reader.GetBoolean("PNM", "psum_double", false);
+    
+    //dram system : pnm clock ratio
+    clk_ratio                   = 30;
+
+    
+    
+    //densemm
+    densemm_buffer_size         = DENSEMM_BUFFER_BYTE_SIZE;
+    densemm_feature_size        = 16; //256
+    densemm_double              = false;
+
+    //sparsemm
+    sparsemm_buffer_size        = SPARSEMM_BUFFER_BYTE_SIZE;
+    sparsemm_feature_size       = 16; //128
+    sparsemm_double             = false;
+    sparsemm_blk_size           = 32; //32, 16 or 1
+    //number of blocksparse kernels
+    //default = 10 (for BLOCK32)
+    num_blocksp_kernels         = 10;
+
+    //matmul general
+    mm_sidelength               = 4;
+
 
     // set burst cycle according to protocol
     // We use burst_cycle for timing and use BL for capacity calculation

@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "configuration.h"
-#define INST_BUFFER_BYTE_SIZE (256 * 1024)
+#define INST_BUFFER_BYTE_SIZE (1024 * 1024 * 20)
 #define PNM_INST_BUF_START 0
 #define PNM_INST_BUF_END (PNM_INST_BUF_START + INST_BUFFER_BYTE_SIZE - 1)
 
@@ -19,6 +19,22 @@
 #define PSUM_BUFFER_BYTE_SIZE (256 * 1024)
 #define PNM_PSUM_BUF_START (PNM_CONFIG_REG_END + 1 + 1024)
 #define PNM_PSUM_BUF_END (PNM_PSUM_BUF_START + PSUM_BUFFER_BYTE_SIZE - 1)
+
+//define address space (probably will need to change later)
+#define DENSEMM_BUFFER_BYTE_SIZE (10*1024*1024) //5MB buffer
+#define PNM_DENSEMM_BUF_START   (PNM_PSUM_BUF_END + 1 + 1024)
+#define PNM_DENSEMM_BUF_END     (PNM_DENSEMM_BUF_START + DENSEMM_BUFFER_BYTE_SIZE - 1)
+
+#define SPARSEMM_BUFFER_BYTE_SIZE   (256*1024)
+#define PNM_SPARSEMM_BUF_START      (PNM_DENSEMM_BUF_END + 1 + 1024)
+#define PNM_SPARSEMM_BUF_END        (PNM_SPARSEMM_BUF_START + SPARSEMM_BUFFER_BYTE_SIZE - 1)
+
+//for 128x128 sys array
+#define DATA_CACHE_BYTE_SIZE        (256*256*16)//1MB cache
+
+//caches just large enough to hold 128x256 32fp numbers
+#define ACT_INPUT_BUF_BYTE_SIZE     (128*256*4)//16kB cache
+#define WGT_INPUT_BUF_BYTE_SIZE     (128*256*4)//16kB cache
 
 namespace dramsim3 {
 
@@ -192,7 +208,7 @@ struct Transaction {
           data_size(data_size),
           fence_mode(fence_mode) {}
     bool IsPNM(uint64_t hex_addr) const {
-        if ((hex_addr >= PNM_INST_BUF_START) && (hex_addr <= PNM_PSUM_BUF_END))
+        if ((hex_addr >= PNM_INST_BUF_START) && (hex_addr <= PNM_SPARSEMM_BUF_END))
             return true;
         return false;
     }

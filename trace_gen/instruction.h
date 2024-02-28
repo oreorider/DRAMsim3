@@ -9,7 +9,7 @@
 #include "common.h"
 #include "config.h"
 
-#define NUM_INST_BUFFER 256*1024/8 // 64bit instruction 
+#define NUM_INST_BUFFER INST_BUFFER_BYTE_SIZE/8 // 64bit instruction 
 
 class Instruction {
   public:   

@@ -135,6 +135,20 @@ class Config {
     int data_size; 
     bool instruction_double; 
     bool psum_double;  
+    //DRAM clk : pnm clk ratio
+    int clk_ratio;
+    //DenseMM
+    int densemm_buffer_size;    //default: 
+    int densemm_feature_size;   //default: 
+    bool densemm_double;        //default: false
+    //SparseMM
+    int sparsemm_buffer_size;   //default: 
+    int sparsemm_feature_size;  //default: 
+    bool sparsemm_double;       //default: false
+    int sparsemm_blk_size;      //default: 32
+    int num_blocksp_kernels;
+    //general mm
+    int mm_sidelength;
 
     // System
     std::string address_mapping;

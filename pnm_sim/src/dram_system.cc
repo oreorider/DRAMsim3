@@ -19,7 +19,8 @@ BaseDRAMSystem::BaseDRAMSystem(Config &config, const std::string &output_dir,
 #ifdef THERMAL
       thermal_calc_(config_),
 #endif  // THERMAL
-      clk_(0) {
+      clk_(0),
+      pnm_clk_(0) {
     total_channels_ += config_.channels;
 
 #ifdef ADDR_TRACE
@@ -104,6 +105,7 @@ JedecDRAMSystem::JedecDRAMSystem(Config &config, const std::string &output_dir,
     }
 
     decoders_.reserve(config_.channels);
+    printf("%u CHANNELS CREATED\n", config_.channels);
     for (auto i = 0; i < config_.channels; i++) {
 #ifdef THERMAL
         std::cerr << "CXL-PNM system does not support termal mode!"
@@ -167,19 +169,23 @@ bool JedecDRAMSystem::AddTransaction(uint64_t hex_addr, bool is_write,
 }
 
 void JedecDRAMSystem::ClockTick() {
-    for (size_t i = 0; i < decoders_.size(); i++) {
-        // look ahead and return earlier
-        while (true) {
-            auto pair = decoders_[i]->ReturnDoneTrans(clk_);
-            if (pair.second == 1) {
-                write_callback_(pair.first);
-            } else if (pair.second == 0) {
-                read_callback_(pair.first);
-            } else {
-                break;
+    if(clk_ % 1 == 0){
+        for (size_t i = 0; i < decoders_.size(); i++) {
+            // look ahead and return earlier
+            while (true) {
+                auto pair = decoders_[i]->ReturnDoneTrans(pnm_clk_);
+                if (pair.second == 1) {
+                    write_callback_(pair.first);
+                } else if (pair.second == 0) {
+                    read_callback_(pair.first);
+                } else {
+                    break;
+                }
             }
         }
+        pnm_clk_++;
     }
+
     for (size_t i = 0; i < decoders_.size(); i++) {
         decoders_[i]->ClockTick();
     }

@@ -7,7 +7,7 @@ if [ "${loc_check}" != "scripts" ]; then
 fi
 
 # Configuration file path
-config_file="../configs/DDR4_8Gb_x16_3200.ini"
+config_file="../configs/DDR4_8Gb_x16_3200_8ch.ini"
 
 configs="$(python3 parse_configs_for_trace_gen.py ${config_file})"
 

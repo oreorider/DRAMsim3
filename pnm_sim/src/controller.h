@@ -44,6 +44,7 @@ class Controller {
 
    private:
     uint64_t clk_;
+    uint64_t pnm_clk_;
     const Config &config_;
     SimpleStats simple_stats_;
     ChannelState channel_state_;

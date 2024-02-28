@@ -7,7 +7,7 @@
 #include <fstream>
 #include <boost/program_options.hpp>
 
-#define INST_BUFFER_BYTE_SIZE (256 * 1024)
+#define INST_BUFFER_BYTE_SIZE (1024 * 1024 * 20)//20MB inst buffer
 #define PNM_INST_BUF_START 0
 #define PNM_INST_BUF_END (PNM_INST_BUF_START + INST_BUFFER_BYTE_SIZE - 1)
 
@@ -20,6 +20,15 @@
 #define PSUM_BUFFER_BYTE_SIZE (256 * 1024)
 #define PNM_PSUM_BUF_START (PNM_CONFIG_REG_END + 1 + 1024)
 #define PNM_PSUM_BUF_END (PNM_PSUM_BUF_START + PSUM_BUFFER_BYTE_SIZE - 1)
+
+#define DENSEMM_BUFFER_BYTE_SIZE (10*1024*1024)//10MB output buffer
+#define PNM_DENSEMM_BUF_START   (PNM_PSUM_BUF_END + 1 + 1024)
+#define PNM_DENSEMM_BUF_END     (PNM_DENSEMM_BUF_START + DENSEMM_BUFFER_BYTE_SIZE - 1)
+
+#define SPARSEMM_BUFFER_BYTE_SIZE   (256*1024)
+#define PNM_SPARSEMM_BUF_START      (PNM_DENSEMM_BUF_END + 1 + 1024)
+#define PNM_SPARSEMM_BUF_END        (PNM_SPARSEMM_BUF_START + SPARSEMM_BUFFER_BYTE_SIZE - 1)
+
 
 using namespace std;
 
@@ -44,6 +53,23 @@ class Config {
     unsigned batch_size;
     vector<unsigned> batch_list; 
     string table_list;
+
+    //modifications for sparsemm
+    enum class SparseMode {BLOCK32, BLOCK16, DIFFPRUNE, OTHER};
+    SparseMode sparse_mode;
+    int blk_sparse_dim;
+    float density;
+    vector<unsigned> num_dense_blk;
+    int activation_sparse;
+
+    //modifications for densemm
+    string act_dim_list;
+    string weight_dim_list;
+    int tile_size;
+    vector<unsigned> act_dim;
+    vector<unsigned> weight_dim;
+    vector<unsigned> num_inst;
+
     int num_tables; 
     vector<unsigned> tables;
     vector<unsigned> accum_table_size;
@@ -58,7 +84,9 @@ class Config {
     vector<unsigned> num_indices_per_lookup; // [table]
     int total_lookup; // per batch
 
-    // [nepochs] [table] [lookup]  
+    // [nepochs] [table] [lookup] [max index]
+    //or
+    // [nepochs] [tiledMultCount] [batch] [512]
     vector<vector<vector<vector<unsigned>>>> indices; 
 
     int default_interval;

@@ -7,10 +7,10 @@ if [ "${loc_check}" != "scripts" ]; then
 fi
 
 # Configuration file path
-config_file="../configs/DDR4_8Gb_x16_3200.ini"
+config_file="../configs/DDR4_8Gb_x16_3200_8ch.ini"
 
 curr_ts="$(date +%Y%m%d_%H%M%S)"
-res_dir="../results/res_dense_${curr_ts}"
+res_dir="../results/res_${curr_ts}"
 mkdir -p ${res_dir}/cxlpnm
 mkdir -p ${res_dir}/base
 
@@ -23,9 +23,9 @@ mv pnm_*.trace ${res_dir}/cxlpnm
 mv dramsim3* ${res_dir}/cxlpnm
 
 # Run with base trace
-../pnm_sim/build/pnmsim ${config_file} \
-    -t traces/test_base.trc \
-    -c 0 \
-    > ${res_dir}/base/pnm_sim_base.log 2>&1
-mv pnm_*.trace ${res_dir}/base
-mv dramsim3* ${res_dir}/base
+#../pnm_sim/build/pnmsim ${config_file} \
+#    -t traces/test_base.trc \
+#    -c 0 \
+#    > ${res_dir}/base/pnm_sim_base.log 2>&1
+#mv pnm_*.trace ${res_dir}/base
+#mv dramsim3* ${res_dir}/base

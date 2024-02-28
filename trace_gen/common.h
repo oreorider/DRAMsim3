@@ -62,6 +62,11 @@ struct Address {
         config_p = config_p_;
     }
 
+    void to_string(){
+        printf("[ADDR TOSTRING] channel: 0x%x, channel_addr: %lx",
+        channel, channel_addr);
+    }
+
     void reset(int ch, int ra, int bg, int ba, int ro, int col,
             const Config *config_p_)
     {

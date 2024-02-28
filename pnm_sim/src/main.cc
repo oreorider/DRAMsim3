@@ -46,7 +46,8 @@ int main(int argc, const char **argv) {
 
     CXL *cxl;
     if (!trace_file.empty()) {
-        cxl = new TraceBasedCXL(config_file, output_dir, trace_file);
+        cxl = new TraceBasedCXL(config_file, 
+        output_dir, trace_file);
     } else {
         std::cerr << "Trace file does not exist" << std::endl;
         AbruptExit(__FILE__, __LINE__);

@@ -57,6 +57,7 @@ class BaseDRAMSystem {
 #endif  // THERMAL
 
     uint64_t clk_;
+    uint64_t pnm_clk_;
     std::vector<AddrDecoder*> decoders_;
 
     // left for hmc

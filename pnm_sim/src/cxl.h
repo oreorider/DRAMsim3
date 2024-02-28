@@ -20,8 +20,16 @@ class CXL {
               std::bind(&CXL::WriteCallBack, this, std::placeholders::_1)),
           clk_(0) {}
     virtual bool ClockTick() = 0; // return done
-    void ReadCallBack(uint64_t addr) { return; }
-    void WriteCallBack(uint64_t addr) { return; }
+    void ReadCallBack(uint64_t addr) { 
+        printf("READCALLBACK from cxl.h\n");
+        printf("read finished at addr: %lx\n", addr);
+        return; 
+        }
+    void WriteCallBack(uint64_t addr) { 
+        printf("WRITECALLBACK from cxl.h\n");
+        printf("write finished at addr: %lx\n", addr);
+        return; 
+        }
     void PrintStats() { memory_system_.PrintStats(); }
 
    protected:

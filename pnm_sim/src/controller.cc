@@ -12,7 +12,7 @@ Controller::Controller(int channel, const Config &config, const Timing &timing,
 Controller::Controller(int channel, const Config &config, const Timing &timing)
 #endif  // THERMAL
     : channel_id_(channel),
-      clk_(0),
+      clk_(0), pnm_clk_(0),
       config_(config),
       simple_stats_(config_, channel_id_),
       channel_state_(config, timing),
@@ -45,13 +45,17 @@ Controller::Controller(int channel, const Config &config, const Timing &timing)
 std::pair<uint64_t, int> Controller::ReturnDoneTrans(uint64_t clk) {
     auto it = return_queue_.begin();
     while (it != return_queue_.end()) {
-        if (clk >= it->complete_cycle) {
+        //if (clk >= it->complete_cycle) {
+        if (pnm_clk_ >= it->complete_cycle){
             if (it->is_write) {
                 simple_stats_.Increment("num_writes_done");
             } else {
                 simple_stats_.Increment("num_reads_done");
                 simple_stats_.AddValue("read_latency", clk_ - it->added_cycle);
             }
+            printf("[CONTROLLER::RETURNDONETRANS] found data in return queue - addr: 0x%lx, complete cycle: %lu\n",
+            it->addr, it->complete_cycle);
+            printf("[CONTROLLER::RETURNDONETRANS] current pnm_clk_: %lu\n", pnm_clk_);
             auto pair = std::make_pair(it->addr, it->is_write);
             it = return_queue_.erase(it);
             return pair;
@@ -157,7 +161,11 @@ void Controller::ClockTick() {
     }
 
     ScheduleTransaction();
+    if(clk_ % 1 == 0){
+        pnm_clk_++;
+    }
     clk_++;
+    
     cmd_queue_.ClockTick();
     simple_stats_.Increment("num_cycles");
     return;
@@ -188,17 +196,24 @@ bool Controller::AddTransaction(Transaction trans) {
             }
         }
         trans.complete_cycle = clk_ + 1;
+        
         return_queue_.push_back(trans);
         return true;
     } else {  // read
         // if in write buffer, use the write buffer value
         if (pending_wr_q_.count(trans.addr) > 0) {
-            trans.complete_cycle = clk_ + 1;
+            //trans.complete_cycle = clk_ + 1;
+            trans.complete_cycle = pnm_clk_ + 1;
             return_queue_.push_back(trans);
+            printf("[CONTROLLER::ADDTRANSACTION] transaction in write buffer - addr: 0x%lx, complete cycle: %lu\n",
+            trans.addr, trans.complete_cycle);
             return true;
+            
         }
         pending_rd_q_.insert(std::make_pair(trans.addr, trans));
         if (pending_rd_q_.count(trans.addr) == 1) {
+            printf("[CONTROLLER::ADDTRANSACTION] transaction not in write buffer, add to pending_rd_q - addr: 0x%lx, complete cycle: %lu\n",
+            trans.addr, trans.complete_cycle);
             if (is_unified_queue_) {
                 unified_queue_.push_back(trans);
             } else {
@@ -260,8 +275,13 @@ void Controller::IssueCommand(const Command &cmd) {
         // if there are multiple reads pending return them all
         while (num_reads > 0) {
             auto it = pending_rd_q_.find(cmd.hex_addr);
-            it->second.complete_cycle = clk_ + config_.read_delay;
+            //it->second.complete_cycle = clk_ + config_.read_delay;
+            it->second.complete_cycle = pnm_clk_ + config_.read_delay/1;
             return_queue_.push_back(it->second);
+            printf("[CONTROLLER::ISSUECOMMAND] memory system clk: %lu\n", clk_);
+            printf("[CONTROLLER::ISSUECOMMAND] read from pending_rd_q\n");
+            printf("[CONTROLLER::ISSUECOMMAND] addr: 0x%lx, complete cycle: %lu\n",
+            it->second.addr, it->second.complete_cycle);
             // update read data to pnm
             pending_rd_q_.erase(it);
             num_reads -= 1;
@@ -309,6 +329,7 @@ void Controller::PrintEpochStats() {
 }
 
 void Controller::PrintFinalStats() {
+    //simple_stats_.AddValue("hardware_utilization", )
     simple_stats_.PrintFinalStats();
 
 #ifdef THERMAL

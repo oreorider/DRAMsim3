@@ -93,9 +93,11 @@ void AddrDecoder::ClockTick() {
     if (!return_queue_.empty())
         ReturnReadData();
 
+    
     ctrl_->ClockTick();
-
-    pnm_->ClockTick();
+    if(clk_ % 1 == 0){
+        pnm_->ClockTick();
+    }
 
     // send transaction to PNM/controller
     SendTransaction();
@@ -156,6 +158,7 @@ bool AddrDecoder::IsAllTransSent() const {
 
 uint64_t AddrDecoder::HexToPNMAddress(uint64_t hex_addr,
                                       const Config* config_p_) {
+    printf("[ADDR DECODER - hex_to_pnm_addr]\t hex_addr: 0x%lx\n", hex_addr);
     uint64_t pnm_addr = 0;
     uint64_t addr_mask = ((uint64_t)1 << config_p_->addr_bits) - 1;
     uint64_t low_mask = ((uint64_t)1 

@@ -75,6 +75,9 @@ SimpleStats::SimpleStats(const Config& config, int channel_id)
              "Average read request latency (cycles)");
     InitStat("average_interarrival", "calculated",
              "Average request interarrival latency (cycles)");
+
+    //PNM hardware utilization
+    //InitStat("hardware_utilization", "double", "Percent PNM systollic array utilization");
 }
 
 void SimpleStats::AddValue(const std::string name, const int value) {

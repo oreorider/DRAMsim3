@@ -13,9 +13,9 @@ configs="$(python3 parse_configs_for_trace_gen.py ${config_file})"
 
 # Parameters
 params="
-    --opcode 1
+    --opcode 2
     --nepochs 1
-    --batch_size 2
+    --batch_size 32
     --embedding_table 1000000-1000000
     --sparse_feature_size 16
     --data_type_size 4
@@ -24,9 +24,11 @@ params="
     --miss_ratio 100
     --base_only false
     --file_name test
-    --act_dim 256-512
-    --weight_dim 512-512
+    --act_dim 512-768
+    --weight_dim 768-768
     --tile_size 256
+    --blk_sparse_dim 32
+    --density 30
 "
 
 #block sparse
@@ -49,8 +51,8 @@ params="
 #"
 
 
-../trace_gen/trace_gen ${configs} ${params} > trace_gen.log 2>&1
+../trace_gen/trace_gen ${configs} ${params} > trace_gen_blocksparse.log 2>&1
 
 
-mkdir -p traces
-mv *.trc traces
+mkdir -p blocksparse_traces
+mv *.trc blocksparse_traces
