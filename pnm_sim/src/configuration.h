@@ -147,6 +147,9 @@ class Config {
     bool sparsemm_double;       //default: false
     int sparsemm_blk_size;      //default: 32
     int num_blocksp_kernels;
+    int num_spgemm_kernels;
+    bool activation_sparse;
+    float weight_density;
     //general mm
     int mm_sidelength;
 

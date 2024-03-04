@@ -77,6 +77,10 @@ if (ADDR_TRACE)
     target_compile_options(pnm_sim PRIVATE -DADDR_TRACE)
 endif (ADDR_TRACE)
 
+if (DEBUG_PRINT)
+    target_compile_options(pnm_sim PRIVATE -DDEBUG_PRINT)
+endif(DEBUG_PRINT)
+
 
 target_include_directories(pnm_sim INTERFACE src)
 target_compile_options(pnm_sim PRIVATE -Wall)
@@ -94,7 +98,7 @@ target_link_libraries(pnmsim PRIVATE pnm_sim args)
 target_compile_options(pnmsim PRIVATE)
 set_target_properties(pnmsim PROPERTIES
     CXX_STANDARD 11
-    CXX_STANDARD_REQUIRED YES
+IRED YES
     CXX_EXTENSIONS NO
 )
 

@@ -108,6 +108,7 @@ PNM::PNM(int channel, const Config &config, const Timing &timing,
 
     //initialize blocksparse kernel status vector
     num_blocksp_kernels = config_.num_blocksp_kernels;
+    //num_spgemm_kernels = config_.num_spgemm_kernels;
     selected_kernel_buffer = 0;
     for(int i = 0; i < num_blocksp_kernels; i++){
         blocksp_kernel_status.push_back(0);
@@ -269,6 +270,31 @@ PNM::PNM(int channel, const Config &config, const Timing &timing,
         block_sp_input_wgt_buf[i] = 0.0;
     }
 
+    activation_sparse = config_.activation_sparse;
+
+    //if activations are sparse, weight is dense
+    if(activation_sparse){
+        printf("activation_sparse TRUE\n");
+        //number instructions required to make one sparse_ element
+        req_num_inst_act_buf = 1638;
+        req_num_inst_wgt_buf = 4096;
+        kern_num_sp_elements = 1638;
+    }
+    //if actiations dense weight sparse
+    //up to 8/256 = 3.125% density is the same complexity
+    else{
+        req_num_inst_act_buf = 4096;
+        req_num_inst_wgt_buf = 82;
+        kern_num_sp_elements = 82;
+    }
+
+    spgemm_input_act_buf = new float[req_num_inst_act_buf];
+    spgemm_input_wgt_buf = new float[req_num_inst_wgt_buf];
+    spgemm_input_act_idx = 0;
+    spgemm_input_wgt_idx = 0;
+
+    //spgemm_input_act_buf
+
     //for(int i = 0; i < num_sys_arr_input; i++){
     //    float* act_data = new float[config_.densemm_feature_size];
     //    float* wgt_data = new float[config_.densemm_feature_size];
@@ -299,7 +325,7 @@ bool PNM::Done() {
 void PNM::ClockTick() {
     //set to stop when 0xcafe 
     if(0){
-    //if(clk_ > 1000000){
+    //if(clk_ > 500000){
         std::cerr << "FORCE STOP" << std::endl;
         AbruptExit(__FILE__, __LINE__);
     }
@@ -845,6 +871,7 @@ void PNM::ReturnDataReady() {
         }
         else if(sparse_.size() >= (uint64_t)num_blocksp_kernels){
             printf("[RETURN DATA READY] sparse double buffers all filled, can't receive any more data\n");
+            //double buffers all filled up, can't take any more. just leave in the return queue (수신거부)
             return;
         }
     
@@ -961,7 +988,9 @@ void PNM::ReturnDataReady() {
             }
         }
         
-        else if(inst->opcode == Opcode::SPARSE){
+        //if block32, block16
+        else if(inst->opcode == Opcode::SPARSE && config_.sparsemm_blk_size != 1){
+            printf("[RETURN DATA READY] BLOCKSPARSE\n");
             if(sparse_.size() == (uint64_t)num_blocksp_kernels){
                 printf("[RETURN DATA READY] all %u sparse_ filled, skip\n", num_blocksp_kernels);
                 return;
@@ -1002,6 +1031,47 @@ void PNM::ReturnDataReady() {
                 block_sp_input_wgt_idx = 0;
             }
         }
+        
+        //if diffprune, blocksize = 1
+        else if(inst->opcode == Opcode::SPARSE && config_.sparsemm_blk_size == 1){
+            printf("[RETURN DATA READY] diffprune\n");
+            if(sparse_.size() == (uint64_t)num_blocksp_kernels){
+                printf("[RETURN DATA READY] all %u sparse_ filled, skip\n", num_blocksp_kernels);
+            }
+
+            //if either buffer is empty, fill them!
+            if(spgemm_input_act_idx != req_num_inst_act_buf || spgemm_input_wgt_idx != req_num_inst_wgt_buf){
+                if(inst->cache_hit == 0){//if activation
+                    printf("[RETURN DATA READY] activation, idx: %u\n", spgemm_input_act_idx);
+                    //add to act buffer, do later
+                    spgemm_input_act_idx += 1;
+                }
+                else{//if weight
+                    printf("[RETURN DATA READY] weight, idx: %u\n", spgemm_input_wgt_idx);
+                    //add to wgt buffer, do later
+                    spgemm_input_wgt_idx += 1;
+                }
+            }
+            
+            //if buffers fulled
+            //printf("[RETURN DATA READY] activation, idx: %u\n", spgemm_input_act_idx);
+            if(spgemm_input_act_idx == req_num_inst_act_buf && spgemm_input_wgt_idx == req_num_inst_wgt_buf){
+                printf("[RETURN DATA READY] both buffers filled, making sparse_ element, clk: %lu, hardware_clk: %lu\n",
+                clk_, hardware_clk_);
+
+                SparseMatmulElement element = SparseMatmulElement(
+                    inst->sparsemm_idx,
+                    spgemm_input_act_buf,
+                    spgemm_input_wgt_buf
+                );
+                sparse_.push_back(element);
+
+                spgemm_input_act_idx = 0;
+                spgemm_input_wgt_idx = 0;
+            }
+
+        }
+
         else {
             std::cerr << "unknown opcode" << (int)inst->opcode << std::endl;
             AbruptExit(__FILE__, __LINE__);
@@ -1085,7 +1155,14 @@ void PNM::ExecuteSparseMatmul(){
 
     //update status of selected kernel
     blocksp_kernel_status[selected_kernel] = 1;
-    sparse_kern_end_clk[selected_kernel] = hardware_clk_ + config_.sparsemm_blk_size*2;
+    //if block32 or block16
+    if(config_.sparsemm_blk_size != 1){
+        sparse_kern_end_clk[selected_kernel] = hardware_clk_ + config_.sparsemm_blk_size*2;
+    }
+    //if diffprune
+    else{
+        sparse_kern_end_clk[selected_kernel] = hardware_clk_ + kern_num_sp_elements;
+    }
     sparse_kern_busy_cnt[selected_kernel]++;
 
     printf("[EXECUTE SPARSEMATMUL] kern %u finishes at clk: %u\n", selected_kernel, sparse_kern_end_clk[selected_kernel]);
@@ -1141,6 +1218,9 @@ void PNM::ExecuteSparseMatmul(){
     }
     else if(config_.sparsemm_blk_size == 16){
         num_sparsemm += 32;
+    }
+    else if(config_.sparsemm_blk_size == 1){
+        num_sparsemm += req_num_inst_act_buf + req_num_inst_wgt_buf;
     }
     else{
         num_sparsemm = 0;

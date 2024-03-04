@@ -268,7 +268,7 @@ int main(int argc, const char* argv[])
                                     [b_id][ll]) * config->data_size,
                                     config
                                 );
-                                addr->to_string();
+                                //addr->to_string();
 
                                 write_base(
                                     config,
@@ -344,18 +344,121 @@ int main(int argc, const char* argv[])
             int K = config->act_dim[1];
             int N = config->weight_dim[1];
 
-            int num_inst_per_block = 0;
+            //int num_inst_per_block = 0;
 
-            int tiledM = M/config->blk_sparse_dim;
-            int tiledK = K/config->blk_sparse_dim;
-            int tiledN = N/config->blk_sparse_dim;
+            int tiledM = M/config->tile_size;
+            int tiledK = K/config->tile_size;
+            int tiledN = N/config->tile_size;
             int numTiledMult = tiledM * tiledK * tiledN;
 
             printf("tiledM: %u,  tiledK: %u, tiledN: %u, numTiledMult: %u\n",
             tiledM, tiledK, tiledN, numTiledMult);
 
             unsigned num_batches = config->batch_list.back();
+            int num_inst_per_sp_tile = config->inst_tile_info["sparse"];
+            int num_inst_per_dense_tile = config->inst_tile_info["dense"];
 
+            int output_idx;
+            //0 for activation, 1 for weight
+            int act_or_wgt = 0;
+
+            printf("DIFFPRUNE instructions\n");
+            for(int epoch = 0; epoch < config->nepochs; epoch++){
+                for(auto ch: config->channel){
+                    printf("channel: %u\n", ch);
+
+                    for(auto num_inst: config->num_inst){
+                        inst->init(
+                        Address(
+                            ch,
+                            true,
+                            PNM_INST_BUF_START,
+                            config
+                            ).GetPNMAddress(),
+                        Address(
+                            ch,
+                            true,
+                            PNM_CONFIG_REG_START + PNM_EXE_REG_OFFSET,
+                            config).GetHexAddress(),
+                        num_inst
+                        );
+                        for(int tiledMultCount = 0; tiledMultCount < numTiledMult; tiledMultCount++){
+                            printf("tiledMultCount: %u\n", tiledMultCount);
+                            for(unsigned b_id = 0; b_id < num_batches; b_id++){
+                                //if batch = 0 (activations)
+                                if(b_id == 0) act_or_wgt = 0;
+                                //if batch = 1 (weights)
+                                else act_or_wgt = 1;
+
+                                int num_inst_in_tile = 0;
+                                //if activations are sparse
+                                if(config->activation_sparse == 1){
+                                    //if b_id = 0 (activations, and activations are sparse)
+                                    if(b_id == 0){
+                                        num_inst_in_tile = num_inst_per_sp_tile;
+                                    }
+
+                                    //if b_id = 1 (weights, and weights are dense)
+                                    else if(b_id == 1){
+                                        num_inst_in_tile = num_inst_per_dense_tile;
+                                    }
+                                }
+                                //
+                                else if(config->activation_sparse == 0){
+                                    //if b_id = 0 (activations, and activations are dense)
+                                    if(b_id == 0){
+                                        num_inst_in_tile = num_inst_per_dense_tile;
+                                    }
+                                    //if b_id = 1 (weights, and weights are sparse)
+                                    else if(b_id == 1){
+                                        num_inst_in_tile = num_inst_per_sp_tile;
+                                    }
+                                }
+                                printf("batch_id: %u, num inst written: %u\n", b_id, num_inst_in_tile);
+                                for(int ll = 0; ll < num_inst_in_tile; ll++){
+                                    
+                                    addr -> reset(
+                                        ch,
+                                        (config->indices[epoch][tiledMultCount]
+                                        [b_id][ll]) * config->data_size,
+                                        config
+                                    );
+
+                                    write_base(
+                                        config,
+                                        addr->GetHexAddress(),
+                                        b_time
+                                    );
+
+                                    //one day, change this to be functionally correct
+                                    output_idx = 0;
+
+                                    inst->write_instruction(
+                                        config->opcode,
+                                        //b_id also works (0 for activation, 1 for weight)
+                                        act_or_wgt,
+                                        output_idx,
+                                        addr,
+                                        config->cxlpnm_out,
+                                        ax_time
+                                    );
+                                }                        
+                            }
+                        }
+                    }
+                }
+            }
+            //return 0;
+            for(auto ch: config->channel){
+                int num_output_tiles = tiledM * tiledN;
+                int num_inst_per_tile = config->tile_size * config->tile_size / 16;
+                read_psum(
+                    ch,
+                    num_output_tiles * num_inst_per_tile,
+                    config,
+                    ax_time
+                );
+            }
 
         }
 
@@ -413,7 +516,7 @@ int main(int argc, const char* argv[])
                                         [b_id][ll]) * config->data_size,
                                         config
                                     );
-                                    addr->to_string();
+                                    //addr->to_string();
 
                                     write_base(
                                         config,

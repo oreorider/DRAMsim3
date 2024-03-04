@@ -79,6 +79,7 @@ Config::Config(int argc, const char* argv[])
     if (!base_only)
         cxlpnm_out.open(file_name + "_cxlpnm.trc");
 
+    printf("opcode: %u\n", opcode);
     if (opcode == 0 ) {
         tables = split(table_list, '-'); //[1000000, 1000000]
 
@@ -226,25 +227,39 @@ Config::Config(int argc, const char* argv[])
         //instantiate activations, weights to hold unique values
         int num_inst_per_tile = tile_size * tile_size / 16;
         printf("num inst per tile: %u\n", num_inst_per_tile);
-        unsigned activations [tiledM][tiledK][num_inst_per_tile];//each tile holds 16 instructions
-        unsigned weights [tiledK][tiledN][num_inst_per_tile];
+        //unsigned activations [tiledM][tiledK][num_inst_per_tile];//each tile holds 16 instructions
+        //unsigned weights [tiledK][tiledN][num_inst_per_tile];
 
+        //initialize vector, set size
+        std::vector<std::vector<std::vector<int>>> activations(
+            tiledM, std::vector<std::vector<int>>(
+            tiledK, std::vector<int>(
+            num_inst_per_tile, 0)));
+        std::vector<std::vector<std::vector<int>>> weights(
+            tiledK, std::vector<std::vector<int>>(
+            tiledN, std::vector<int>(
+            num_inst_per_tile, 0)));
+        
         set<unsigned> unique_vals;
-
+        int data_num = 0;
         //instantiate activations
         printf("printing instantiated activations\n");
         for(int i = 0; i < tiledM; i++){
             for(int j = 0; j < tiledK; j++){
                 printf("i: %u, j: %u\n", i, j);
-                int k = 0;
-                while(k < num_inst_per_tile){
-                    unsigned act_val = rand() % 1000000;
-                    if(unique_vals.find(act_val) == unique_vals.end()){
-                        activations[i][j][k] = act_val;
-                        k++;
-                        unique_vals.insert(act_val);
-                        printf("%u ", act_val);
-                    }
+                //int k = 0;
+                for(int k = 0; k < num_inst_per_tile; k++){
+                    //unsigned act_val = rand() % 1000000;
+                    //if(unique_vals.find(act_val) == unique_vals.end()){
+                    //    activations[i][j][k] = act_val;
+                    //    k++;
+                    //    unique_vals.insert(act_val);
+                    //    printf("%u ", act_val);
+                    //}
+                    activations[i][j][k] = data_num;
+                    data_num+=1;
+                    //k+=1;
+                    printf("%u ", activations[i][j][k]);
                 }
                 printf("\n");
             }
@@ -255,15 +270,20 @@ Config::Config(int argc, const char* argv[])
         for(int i = 0; i < tiledK; i++){
             for(int j = 0; j < tiledN; j++){
                 printf("i: %u, j: %u\n", i, j);
-                int k = 0;
-                while(k < num_inst_per_tile){
-                    unsigned weight_val = rand() % 1000000;
-                    if(unique_vals.find(weight_val) == unique_vals.end()){
-                        weights[i][j][k] = weight_val;
-                        k++;
-                        unique_vals.insert(weight_val);
-                        printf("%u ", weight_val);
-                    }
+                //int k = 0;
+                for(int k = 0; k < num_inst_per_tile; k++){
+                //while(k < num_inst_per_tile){
+                    //unsigned weight_val = rand() % 1000000;
+                    //if(unique_vals.find(weight_val) == unique_vals.end()){
+                    //    weights[i][j][k] = weight_val;
+                    //    k++;
+                    //    unique_vals.insert(weight_val);
+                    //    printf("%u ", weight_val);
+                    //}
+                    weights[i][j][k] = data_num;
+                    data_num++;
+                    //k++;
+                    printf("%u ", weights[i][j][k]);
                 }
                 printf("\n");
             }
@@ -292,6 +312,7 @@ Config::Config(int argc, const char* argv[])
                 tiledM_idx, tiledN_idx, tiledK_idx);
 
                 //loop through batch dimension
+                //batch_size = 2
                 for(unsigned batch = 0; batch < batch_size; batch++){
                     //indices[epoch][tiledMultCount][batch].resize(32);
                     printf("batch: %u\n",batch);
@@ -317,6 +338,7 @@ Config::Config(int argc, const char* argv[])
                         (batch * 2048) + (inst_cnt % 2048),
                         weights[tiledK_idx][tiledN_idx][inst_cnt],
                         inst_cnt);
+                        
                         if(inst_cnt%4 == 0){
                             printf("\n");
                         }
@@ -350,6 +372,8 @@ Config::Config(int argc, const char* argv[])
 
         set<unsigned> unique_vals;
 
+        int data_num = 0;
+
         if(sparse_mode == SparseMode::BLOCK32){
             tiledM = M/32;
             tiledK = K/32;
@@ -374,11 +398,22 @@ Config::Config(int argc, const char* argv[])
         }
 
         std::vector<std::pair<int, int>> dense_block_idxs;
+        std::vector<std::pair<int, int>> tmp_wgt_blk_idxs;
 
         int dense_blk_cnt = 0;
 
-        unsigned activations[tiledM][tiledK][num_inst_per_block];
-        unsigned weights[tiledK][tiledN][num_inst_per_block];
+        //unsigned activations[tiledM][tiledK][num_inst_per_block];
+        //unsigned weights[tiledK][tiledN][num_inst_per_block];
+
+        std::vector<std::vector<std::vector<int>>> activations(
+            tiledM, std::vector<std::vector<int>>(
+            tiledK, std::vector<int>(
+            num_inst_per_block, 0)));
+        std::vector<std::vector<std::vector<int>>> weights(
+            tiledK, std::vector<std::vector<int>>(
+            tiledN, std::vector<int>(
+            num_inst_per_block, 0)));
+
         float r = 0.0;
 
         //create activations (activations are dense)
@@ -386,68 +421,107 @@ Config::Config(int argc, const char* argv[])
         for(int i = 0; i < tiledM; i++){
             for(int j = 0; j < tiledK; j++){
                 r = (rand() % 10000)/100.0;
-
+                for(int k = 0; k < num_inst_per_block; k++){
+                    activations[i][j][k] = data_num;
+                    data_num +=1;
+                    //printf("%u ", activations[i][j][k]);
+                }
                 //fill in 32x32 block
-                if(1){
-                    int k = 0;
-                    while(k < num_inst_per_block){
-                        unsigned act_val = rand() % 1000000;
-                        if(unique_vals.find(act_val) == unique_vals.end()){
-                            activations[i][j][k] = act_val;
-                            k++;
-                            unique_vals.insert(act_val);
-                            //printf("%u ", act_val);
-                        }
-                    }
-                    //printf("\n");
-                }
-                //keep as 0
-                else{
-                    for(int k = 0; k < num_inst_per_block; k++){
-                        activations[i][j][k] = 0;
-                    }
-                }
+                //if(1){
+                //    int k = 0;
+                //    while(k < num_inst_per_block){
+                //        unsigned act_val = rand() % 1000000;
+                //        if(unique_vals.find(act_val) == unique_vals.end()){
+                //            activations[i][j][k] = act_val;
+                //            k++;
+                //            unique_vals.insert(act_val);
+                //            //printf("%u ", act_val);
+                //        }
+                //    }
+                //    //printf("\n");
+                //}
+                ////keep as 0
+                //else{
+                //    for(int k = 0; k < num_inst_per_block; k++){
+                //        activations[i][j][k] = 0;
+                //    }
+                //}
             }
         }
 
+        int num_activations = data_num;
         printf("weights (block sparse)\n");
         //create weights (weights are sparse)
-        srand(0);
-        for(int i = 0; i < tiledK; i++){
-            for(int j = 0; j < tiledN; j++){
-                r = (rand() % 10000)/100;
+        srand(time(NULL));
+        int expected_dense_blk_cnt = tiledK * tiledN * (density/100.);
+        printf("expected dense blk cnt: %u\n", expected_dense_blk_cnt);
+        //return;
 
-                //fill in 32x32 block
-                if(r<=density){
-                    //printf("r: %u\n", r);
-                    printf("block number %u at idx i:%u, j:%u\n", dense_blk_cnt, i, j);
-                    dense_blk_cnt++;
-                    dense_block_idxs.push_back(std::pair<int, int>(i,j));
-                    int k = 0;
-                    while(k < num_inst_per_block){
-                        unsigned wgt_val = rand() % 1000000;
-                        if(unique_vals.find(wgt_val) == unique_vals.end()){
-                            weights[i][j][k] = wgt_val;
-                            k++;
-                            unique_vals.insert(wgt_val);
-                            //printf("%u ", wgt_val);
+        while(true){
+            for(int i = 0; i < tiledK; i++){
+                for(int j = 0; j < tiledN; j++){
+                    r = (rand() % 100);
+
+                    //fill in 32x32 block
+                    if(r<=density){
+                        //printf("r: %u\n", r);
+                        //printf("block number %u at idx i:%u, j:%u\n", dense_blk_cnt, i, j);
+                        dense_blk_cnt++;
+                        //dense_block_idxs.push_back(std::pair<int, int>(i,j));
+                        tmp_wgt_blk_idxs.push_back(std::pair<int, int>(i,j));
+                        //int k = 0;
+                        //while(k < num_inst_per_block){
+                        //    unsigned wgt_val = rand() % 1000000;
+                        //    if(unique_vals.find(wgt_val) == unique_vals.end()){
+                        //        weights[i][j][k] = wgt_val;
+                        //        k++;
+                        //        unique_vals.insert(wgt_val);
+                        //        //printf("%u ", wgt_val);
+                        //    }
+                        //}
+                        for(int k = 0; k < num_inst_per_block; k++){
+                            weights[i][j][k] = data_num;
+                            data_num += 1;
                         }
+                        //printf("\n");
                     }
-                    //printf("\n");
-                }
-                else{
-                    for(int k = 0; k < num_inst_per_block; k++){
-                        weights[i][j][k] = 0;
+                    else{
+                        for(int k = 0; k < num_inst_per_block; k++){
+                            weights[i][j][k] = 0;
+                        }
                     }
                 }
             }
+            printf("dense blk cnt: %u\n", dense_blk_cnt);
+            if(dense_blk_cnt == expected_dense_blk_cnt){
+                printf("configuration good\n");
+                dense_block_idxs.insert(dense_block_idxs.end(), tmp_wgt_blk_idxs.begin(), tmp_wgt_blk_idxs.end());
+                printf("dense block idx size: %lu\n", dense_block_idxs.size());
+                break;
+            }
+            else{
+                printf("retrying\n");
+                tmp_wgt_blk_idxs.clear();
+                dense_blk_cnt = 0;
+                data_num = num_activations;
+            }
+            
         }
+        //return;
 
+        //int numTiledMult = tiledM * tiledK * tiledN;
+        //printf("number of tiledMults: %u\n", numTiledMult);
         printf("number of dense blocks: %u\n", dense_blk_cnt);
         int numBlockMult = dense_blk_cnt * tiledM;
         num_dense_blk.push_back(dense_blk_cnt);
         printf("number of dense mults total: %u\n", numBlockMult);
         indices.resize(nepochs);
+        
+        //for(int epoch = 0; epoch < nepochs; epoch++){
+        //    
+        //}
+
+        
         for(int epoch = 0; epoch < nepochs; epoch++){
             printf("epoch: %u\n", epoch);
             indices[epoch].resize(numBlockMult);
@@ -458,7 +532,7 @@ Config::Config(int argc, const char* argv[])
 
             for(int blockMultCount = 0; blockMultCount < numBlockMult; blockMultCount++){
                 printf("blockMultCount: %u\n", blockMultCount);
-                indices[epoch][blockMultCount].resize(batch_size);
+                indices[epoch][blockMultCount].resize(1);
 
                 //increment M_idx after doing all block mult for one row of actiation
                 int nth_dense_block = blockMultCount%dense_blk_cnt;
@@ -505,7 +579,7 @@ Config::Config(int argc, const char* argv[])
 
             }
         }
-
+        
         printf("total %u instructions\n", num_inst_cnt);
         batch_list.push_back(1);
         num_inst.push_back(num_inst_cnt);
@@ -535,20 +609,38 @@ Config::Config(int argc, const char* argv[])
         //int num_inst_per_sp_tile = (tile_size * tile_size / 16) * (density/100.);
         int num_inst_per_sp_tile = 0;
         if(activation_sparse == 1){
-            num_inst_per_sp_tile = 768;
+            //(256 * 256 / 8) * 0.2 = 1638.4
+            num_inst_per_sp_tile = 1638;
         }
+        //hardcode to 1%
         else{
-            num_inst_per_sp_tile = (tile_size * tile_size / 16) * (density/100.);
+            //num_inst_per_sp_tile = (tile_size * tile_size / 8) * (density/100.);
+            num_inst_per_sp_tile = 82;
         }
         int num_inst_per_dense_tile = tile_size * tile_size / 16;
+
+        inst_tile_info.insert(std::pair<std::string, int>("dense", num_inst_per_dense_tile));
+        inst_tile_info.insert(std::pair<std::string, int>("sparse", num_inst_per_sp_tile));
+
         
         printf("num inst per sp tile: %u\n", num_inst_per_sp_tile);
         printf("num inst per dense tile: %u\n", num_inst_per_dense_tile);
 
         //allocate enough memory to store both dense matrixes
-        unsigned activations[tiledM][tiledK][num_inst_per_dense_tile];
-        unsigned weights[tiledK][tiledN][num_inst_per_dense_tile];
+        //unsigned activations[tiledM][tiledK][num_inst_per_dense_tile];
+        //unsigned weights[tiledK][tiledN][num_inst_per_dense_tile];
+
+        //THE SPARSE MATRIX IS STORED IN CSR FORMAT
+        std::vector<std::vector<std::vector<int>>> activations(
+            tiledM, std::vector<std::vector<int>>(
+            tiledK, std::vector<int>(
+            num_inst_per_dense_tile, 0)));
+        std::vector<std::vector<std::vector<int>>> weights(
+            tiledK, std::vector<std::vector<int>>(
+            tiledN, std::vector<int>(
+            num_inst_per_dense_tile, 0)));
         int num_inst_cnt = 0;
+
         //int nnz;
 
         
@@ -557,11 +649,58 @@ Config::Config(int argc, const char* argv[])
         //create activations
         printf("activations (diffprune) \t");
         if(activation_sparse){
-            printf("activations are sparse\n");
+            printf("activations are sparse, weights are dense\n");
         }
         else{
-            printf("activations are dense\n");
+            printf("activations are dense, weights are sparse\n");
         }
+
+        int data_num = 0;
+
+        //if activation sparse, weight dense
+        if(activation_sparse){
+            for(int i = 0; i < tiledM; i++){
+                for(int j = 0; j < tiledK; j++){
+                    for(int k = 0; k < num_inst_per_sp_tile; k++){
+                        //stored in csr format
+                        activations[i][j][k] = data_num;
+                        data_num++;
+                    }
+                }
+            }
+            for(int i = 0; i < tiledK; i++){
+                for(int j = 0; j < tiledM; j++){
+                    for(int k = 0; k < num_inst_per_dense_tile; k++){
+                        weights[i][j][k] = data_num;
+                        data_num++;
+                    }
+                }
+            }
+        }
+
+        //if activation dense, weight sparse
+        else{
+            for(int i = 0; i < tiledM; i++){
+                for(int j = 0; j < tiledK; j++){
+                    for(int k = 0; k < num_inst_per_dense_tile; k++){
+                        activations[i][j][k] = data_num;
+                        data_num++;
+                    }
+                }
+            }
+            for(int i = 0; i < tiledK; i++){
+                for(int j = 0; j < tiledM; j++){
+                    for(int k = 0; k < num_inst_per_sp_tile; k++){
+                        //stored in CSR format
+                        weights[i][j][k] = data_num;
+                        data_num++;
+                    }
+                }
+            }
+        }
+
+
+        /*
         for(int i = 0; i < tiledM; i++){
             for(int j = 0; j < tiledK; j++){
 
@@ -601,6 +740,7 @@ Config::Config(int argc, const char* argv[])
             printf("weights are sparse\n");
         }
         
+        
         for(int i = 0; i < tiledK ; i++){
             for(int j = 0; j < tiledN; j++){
 
@@ -637,7 +777,93 @@ Config::Config(int argc, const char* argv[])
                 }
             }
         }
+        */
         
+        indices.resize(nepochs);
+        for(int epoch = 0; epoch < nepochs; epoch++){
+            printf("epoch: %u\n", epoch);
+
+            indices[epoch].resize(numTiledMult);
+
+            int tiledM_idx = 0;
+            int tiledK_idx = 0;
+            int tiledN_idx = 0;
+            for(int tiledMultCount = 0; tiledMultCount < numTiledMult; tiledMultCount++){
+                printf("tiledMultCount: %u\n", tiledMultCount);
+
+                indices[epoch][tiledMultCount].resize(batch_size);//batch size = 2
+
+                tiledM_idx = tiledMultCount/(tiledK * tiledN);
+                tiledN_idx = (tiledMultCount - tiledM_idx * tiledK * tiledN)/tiledK;
+                tiledK_idx = tiledMultCount % tiledK;
+
+                printf("tiledM_idx: %u, tiledN_idx: %u, tiledK_idx: %u\n",
+                tiledM_idx, tiledN_idx, tiledK_idx);
+
+                for(int batch = 0; batch < batch_size; batch++){
+                    printf("batch: %u\n", batch);
+
+                    //if activation sparse, weight dense
+                    if(activation_sparse == 1){
+                        //add first(or second) half of activations
+                        for(int inst_cnt = 819*batch; inst_cnt < 819 + 819*batch; inst_cnt++){
+                            indices[epoch][numTiledMult][batch].push_back(
+                                activations[tiledM_idx][tiledK_idx][inst_cnt]
+                            );
+                        }
+                        //add first half of weights
+                        for(int inst_cnt = 0; inst_cnt < 2048; inst_cnt++){
+                            indices[epoch][numTiledMult][batch].push_back(
+                                weights[tiledK_idx][tiledN_idx][inst_cnt]
+                            );
+                        }
+                        //add first(or second) half of activations(again)
+                        for(int inst_cnt = 819*batch; inst_cnt < 819 + 819*batch; inst_cnt++){
+                            indices[epoch][numTiledMult][batch].push_back(
+                                activations[tiledM_idx][tiledK_idx][inst_cnt]
+                            );
+                        }
+                        //add second half of weights
+                        for(int inst_cnt = 2048; inst_cnt < 4096; inst_cnt++){
+                            indices[epoch][numTiledMult][batch].push_back(
+                                weights[tiledK_idx][tiledN_idx][inst_cnt]
+                            );
+                        }
+                    }
+                    //if activation dense, weight sparse
+                    else{
+                        //add first(second) half of activations
+                        for(int inst_cnt = 2048*batch; inst_cnt < 2048 + 2048*batch; inst_cnt++){
+                            indices[epoch][numTiledMult][batch].push_back(
+                                activations[tiledM_idx][tiledK_idx][inst_cnt]
+                            );
+                        }
+                        //add first half of weights
+                        for(int inst_cnt = 0; inst_cnt < 42; inst_cnt++){
+                            indices[epoch][numTiledMult][batch].push_back(
+                                weights[tiledK_idx][tiledN_idx][inst_cnt]
+                            );
+                        }
+                        //add first(second) half of activations (again)
+                        for(int inst_cnt = 2048*batch; inst_cnt < 2048 + 2048*batch; inst_cnt++){
+                            indices[epoch][numTiledMult][batch].push_back(
+                                activations[tiledM_idx][tiledK_idx][inst_cnt]
+                            );
+                        }
+                        //add second half of weights
+                        for(int inst_cnt = 42; inst_cnt < 82; inst_cnt++){
+                            indices[epoch][numTiledMult][batch].push_back(
+                                activations[tiledM_idx][tiledK_idx][inst_cnt]
+                            );
+                        }
+                    }
+                }
+
+            }
+        }
+
+
+        /*
         indices.resize(nepochs);
         for(int epoch = 0; epoch < nepochs; epoch++){
             printf("epoch: %u\n", epoch);
@@ -665,7 +891,7 @@ Config::Config(int argc, const char* argv[])
                     //if writing activations
                     if(batch == 0){
                         printf("writing activations\n");
-                        
+
                         //if activations are sparse
                         if(activation_sparse == 1){
                             for(int inst_cnt = 0; inst_cnt < num_inst_per_sp_tile; inst_cnt++){
@@ -713,10 +939,10 @@ Config::Config(int argc, const char* argv[])
                 
             }
         }
+        */
         printf("total %u instructions\n", num_inst_cnt);
         batch_list.push_back(2);
         num_inst.push_back(num_inst_cnt);
-
 
     }   
     else{

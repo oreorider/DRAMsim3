@@ -6,6 +6,7 @@
 #include <sstream>
 #include <fstream>
 #include <boost/program_options.hpp>
+#include <time.h>
 
 #define INST_BUFFER_BYTE_SIZE (1024 * 1024 * 20)//20MB inst buffer
 #define PNM_INST_BUF_START 0
@@ -60,6 +61,7 @@ class Config {
     int blk_sparse_dim;
     float density;
     vector<unsigned> num_dense_blk;
+    std::map<std::string, int> inst_tile_info;
     int activation_sparse;
 
     //modifications for densemm

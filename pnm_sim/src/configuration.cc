@@ -144,14 +144,24 @@ void Config::InitDRAMParams() {
     densemm_feature_size        = 16; //256
     densemm_double              = false;
 
+    //determines if block32, block16, or diffprune
+    sparsemm_blk_size           = 16; //32, 16 or 1
+
+
     //sparsemm
     sparsemm_buffer_size        = SPARSEMM_BUFFER_BYTE_SIZE;
     sparsemm_feature_size       = 16; //128
     sparsemm_double             = false;
-    sparsemm_blk_size           = 32; //32, 16 or 1
     //number of blocksparse kernels
-    //default = 10 (for BLOCK32)
-    num_blocksp_kernels         = 10;
+    //default = 10 (for BLOCK32), 23 (for BLOCK16) 1 (for DIFFPRUNE)
+    num_blocksp_kernels         = 23;
+
+    //DIFFPRUNE
+    //num_spgemm_kernels          = 10;
+    activation_sparse           = false;
+    //not used
+    weight_density              = 1;//if activation is sparse, weight is dense
+
 
     //matmul general
     mm_sidelength               = 4;

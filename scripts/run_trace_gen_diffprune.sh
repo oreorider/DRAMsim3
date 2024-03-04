@@ -24,12 +24,12 @@ params="
     --miss_ratio 100
     --base_only false
     --file_name test
-    --act_dim 256-512
-    --weight_dim 512-512
+    --act_dim 512-3072
+    --weight_dim 3072-768
     --tile_size 256
     --blk_sparse_dim 1
-    --density 18.875
-    --activation_sparse 1
+    --density 1
+    --activation_sparse 0
 "
 
 #block sparse

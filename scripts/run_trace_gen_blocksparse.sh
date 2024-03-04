@@ -12,10 +12,11 @@ config_file="../configs/DDR4_8Gb_x16_3200.ini"
 configs="$(python3 parse_configs_for_trace_gen.py ${config_file})"
 
 # Parameters
+#batch_size not rlly used
 params="
     --opcode 2
     --nepochs 1
-    --batch_size 32
+    --batch_size 1
     --embedding_table 1000000-1000000
     --sparse_feature_size 16
     --data_type_size 4
@@ -25,15 +26,14 @@ params="
     --base_only false
     --file_name test
     --act_dim 512-768
-    --weight_dim 768-768
+    --weight_dim 768-3072
     --tile_size 256
-    --blk_sparse_dim 32
-    --density 30
+    --blk_sparse_dim 16
+    --density 20
 "
 
 #block sparse
 #params="
-#    --opcode 2
 #    --nepochs 1
 #    --batch_size 2
 #    --embedding_table 1000000-1000000

@@ -261,16 +261,29 @@ class PNM {
     float* block_sp_input_wgt_buf;
     int block_sp_input_act_idx;
     int block_sp_input_wgt_idx;
+
+    float* spgemm_input_act_buf;
+    float* spgemm_input_wgt_buf;
+    int spgemm_input_act_idx;
+    int spgemm_input_wgt_idx;
     //number of inputs to block sparse arrays that feed into systollic array
     int num_block_sp_input;
     //status of blocksparse systolic arrays (kernels)
     //0:nothing       1:busy        2:double buffer full
     std::vector<int> blocksp_kernel_status;
     int num_blocksp_kernels;
+    int num_spgemm_kernels;
     int selected_kernel_buffer;
     //keep track of all sparse systolic array end clocks
     std::vector<int> sparse_kern_end_clk;
     std::vector<int> sparse_kern_busy_cnt;
+
+    //control signals for DIFFPRUNE
+    int activation_sparse;
+    //number instructions required to be in buffer for sparse_ element to be made
+    int req_num_inst_act_buf;
+    int req_num_inst_wgt_buf;
+    int kern_num_sp_elements;
 
     //sparsemm buffer
     // <addr, data_value>
