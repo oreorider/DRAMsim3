@@ -135,7 +135,7 @@ void Config::InitDRAMParams() {
     psum_double                 = reader.GetBoolean("PNM", "psum_double", false);
     
     //dram system : pnm clock ratio
-    clk_ratio                   = 30;
+    clk_ratio                   = 20;
 
     
     
@@ -153,8 +153,8 @@ void Config::InitDRAMParams() {
     sparsemm_feature_size       = 16; //128
     sparsemm_double             = false;
     //number of blocksparse kernels
-    //default = 10 (for BLOCK32), 23 (for BLOCK16) 1 (for DIFFPRUNE)
-    num_blocksp_kernels         = 23;
+    //default = 6 (for BLOCK32), 12 (for BLOCK16) 1 (for DIFFPRUNE)
+    num_blocksp_kernels         = 12;
 
     //DIFFPRUNE
     //num_spgemm_kernels          = 10;

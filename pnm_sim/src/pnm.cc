@@ -276,7 +276,7 @@ PNM::PNM(int channel, const Config &config, const Timing &timing,
     if(activation_sparse){
         printf("activation_sparse TRUE\n");
         //number instructions required to make one sparse_ element
-        req_num_inst_act_buf = 1638;
+        req_num_inst_act_buf = 1638/2;
         req_num_inst_wgt_buf = 4096;
         kern_num_sp_elements = 1638;
     }
@@ -673,9 +673,10 @@ void PNM::ScheduleInstruction() {
     //    printf("[SCHEDULE INST] weight instruction schedule\n");
     //}
     printf("[SCHEDULE INST] program count: %u\n", program_count);
+    bool isActivation = (it->second.cache_hit == 0);
     
-    //if cache miss
-    if(cache_it == data_cache_.end()){
+    //if cache miss, and not activation
+    if(cache_it == data_cache_.end() && !isActivation){
         printf("[SCHEDULE INST - CACHE MISS]\n");
         //printf("cachpe miss\n");
         Transaction trans = InstructionToTransaction(it->second);
@@ -722,17 +723,22 @@ void PNM::ScheduleInstruction() {
         //printf("[SCHEDULE INST] hexaddr: 0x%lx, complete cycle: %lu", 
         //return_queue_.back().hex_addr, return_queue_.back().complete_cycle);
     }
-    //if cache hit
+    //if cache hit or is activation
     else {
         //printf("cache hit\n");
-        //if cache queue is not full (cache can take up to 8 instructions)
+        //if cache queue is not full (cache queue can take up to 8 instructions)
         //if (cache_q_.size() < 8) {
         if(1){
-            printf("[SCHEDULE INST - CACHE HIT]\n");    
+            if(isActivation){
+                printf("[SCHEDULE INST - CACHE HIT] activation auto cache hit \n");
+            }
+            else{
+                printf("[SCHEDULE INST - CACHE HIT] weight cache hit\n");
+            }    
+            printf("[SCHEDULE INST] %lx\n", it->second.hex_addr);
             // = max cache queue size
             //add Instruction to cache_q
-            cache_q_.push_back(it->second);
-            //printf("[SCHEDULE INST] cache q size: %lu\n", cache_q_.size());
+            printf("[SCHEDULE INST] cache q size: %lu\n", cache_q_.size());
             //printf("[SCHEDULE INST] cache q empty: %lu\n", cache_q_.empty());
             //set complete cycle to inf, add to return queue
             //printf("[SCHEDULE INST] hex addr: 0x%lx added to return queue\n", it->second.hex_addr);
@@ -740,6 +746,7 @@ void PNM::ScheduleInstruction() {
             it->second.complete_cycle = INT_MAX;
             it->second.data = new float[config_.densemm_feature_size];
             return_queue_.push_back(it->second);
+            cache_q_.push_back(it->second);
 
             //printf("[SCHEULDE INST] data: [");
             //for(int i = 0; i < config_.densemm_feature_size; i++){
@@ -757,9 +764,11 @@ void PNM::ScheduleInstruction() {
             //}
 
             //update most frequent cache update time
-            //xs_it (access iterator)
-            auto xs_it = cache_access_time.find(it->second.hex_addr);
-            xs_it->second = clk_;
+            //if a weight cache hit, update access time
+            if(cache_it != data_cache_.end()){
+                auto xs_it = cache_access_time.find(it->second.hex_addr);
+                xs_it->second = clk_;
+            }
             //printf("[SCHEDULE INST] updating cache access time to %lu\n", clk_);
         }
         //if cache hit, but queue cache is full???
@@ -801,9 +810,18 @@ Transaction PNM::InstructionToTransaction(const Instruction inst) {
 void PNM::ReadCache() {
     auto it = cache_q_.begin();
     auto it_c = data_cache_.find(it->hex_addr);
+    bool isActivation = (it->cache_hit == 0);
 
-    if (it_c == data_cache_.end()){
-        return;
+    if (it_c == data_cache_.end()){//if instruction not in data cache
+        if(isActivation == false){//if instruction is not activation (weight)
+            printf("[READ CACHE] cache q not empty, but weight, so no auto cache hit\n");
+            return;//return back if instruction is not in data cache and instruction is a weight
+            //weights must always be in the data cache for cache hit to occur.
+        }
+        else{
+            printf("[READ CACHE] activation auto cache hit ");
+            printf("hex addr: %lx\n", it->hex_addr);
+        }
     }
 
 #ifdef CMD_TRACE
@@ -833,10 +851,22 @@ void PNM::ReadCache() {
 
 
     //update instructions in return_queue to have complete cycle = clk_ + 1
+    
     for(auto& element : return_queue_){
         if(element.hex_addr == it->hex_addr){
             element.complete_cycle = clk_ + 1;
-            element.data = it_c->second;
+
+            //just set all activations as 1
+            if(isActivation){
+                for(int i = 0; i < config_.densemm_feature_size; i++){
+                    element.data[i] = 1.0;
+                }
+            }
+
+            //get weight data from cache
+            else{
+                element.data = it_c->second;
+            }
         }
     }
 
@@ -861,7 +891,6 @@ void PNM::ReturnDataReady() {
     //2) end of queue
     //3) instruction not valid
     while(1){
-        
         auto inst = return_queue_.begin();
         //printing return queue        
 
