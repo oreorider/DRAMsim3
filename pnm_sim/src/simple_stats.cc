@@ -60,6 +60,8 @@ SimpleStats::SimpleStats(const Config& config, int channel_id)
                 "rank", config_.ranks);
     InitVecStat("sref_energy", "vec_double", "SREF energy", "rank",
                 config_.ranks);
+    InitVecStat("pnm_utilization", "vec_double", "PNM sys array utilization", "_",
+                config_.num_blocksp_kernels)
 
     // Histogram stats
     InitHistoStat("read_latency", "Read request latency (cycles)", 0, 200, 10);
@@ -78,6 +80,12 @@ SimpleStats::SimpleStats(const Config& config, int channel_id)
 
     //PNM hardware utilization
     //InitStat("hardware_utilization", "double", "Percent PNM systollic array utilization");
+}
+
+void SimpleStats::PrintUtilStats(std::vector<double> utils){
+    for (int i = 0; i < utils.size(); i++){
+        vec_doubles_["pnm_utilization"][i] = utils[i];
+    }
 }
 
 void SimpleStats::AddValue(const std::string name, const int value) {

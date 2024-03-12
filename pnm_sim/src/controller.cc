@@ -341,6 +341,10 @@ void Controller::PrintFinalStats() {
     return;
 }
 
+void Controller::PrintUtilStats(std::vector<double> utils){
+    simple_stats_.PrintUtilStats(utils);
+}
+
 void Controller::UpdateCommandStats(const Command &cmd) {
     switch (cmd.cmd_type) {
         case CommandType::READ:

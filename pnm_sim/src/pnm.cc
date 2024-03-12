@@ -7,7 +7,8 @@
 #include <map>
 #include <algorithm>
 #include <vector>
-
+#include <iostream>
+#include <fstream>
 
 
 namespace dramsim3 {
@@ -1275,14 +1276,17 @@ void PNM::ExecuteSparseMatmul(){
         //float utilization = 100 * ((double)hardware_busy_clk_cnt)/(end_clk - start_clk);
         //printf("hardware busy clk cnt: %u\n", hardware_busy_clk_cnt);
         //printf("percent hardware utilization: %f\n", utilization);
+        std::vector<double> utils;
         for(int i = 0; i < num_blocksp_kernels; i++){
             float utilization = 100 * ((double)sparse_kern_busy_cnt[i])/(end_clk - start_clk);
             printf("kernel %u utilization: %f\n", i, utilization);
+            utils.push_back(utilization);
         }
+        
+        PrintUtilStats(utils);
         //printf("start clk: %u, end clk: %u, hardware busy clk cnt : %u\n",
         //start_clk, end_clk, hardware_busy_clk_cnt);
         //printf("num cycles that added to buf: %u\n", add_to_buf_cnt);
-
 
         //std::ofstream txt_out(config_.txt_stats_name, std::ofstream::out);
         //txt_out << "hardware_utilization: \t" << std::to_string(utilization) << std::endl;
@@ -1453,7 +1457,7 @@ std::pair<uint64_t, int> PNM::ReturnDoneTrans(uint64_t clock) {
 
     //how many times this was requested
     auto num_reads = requested_rd_q_.count(pair.first);
-    printf("[RETURN DONE TRANS] clock: %lu, hex addr: 0x%lx\n", clock, pair.first);
+    printf("[RETURN DONE TRANS] clock: %lu, hex addr: 0x%lx, num_reads: %lu\n", clock, pair.first, num_reads);
     
     auto rq_it = return_queue_.begin();
     //make deterministic data that was retreived from memory
@@ -1606,8 +1610,9 @@ std::pair<uint64_t, int> PNM::ReturnDoneTrans(uint64_t clock) {
 
         //evict from cache based on access time
         printf("[RETURN DONE TRANS] cache size: %lu\n", data_cache_.size());
-        //each data element is 32bit, 4Byte
-        if(data_cache_.size() == DATA_CACHE_BYTE_SIZE/4){
+        //each data element is one instruction, each instruction holds 64B
+        if(data_cache_.size() == DATA_CACHE_BYTE_SIZE/64){
+        //if(0){ //infinite cache
             int min = INT_MAX;
             auto min_it = cache_access_time.begin();
             for(auto xs_it = cache_access_time.begin(); xs_it != cache_access_time.end(); xs_it++){
@@ -1630,5 +1635,9 @@ std::pair<uint64_t, int> PNM::ReturnDoneTrans(uint64_t clock) {
     }
     delete [] returned_data;
     return pair; 
+}
+
+void PNM::PrintUtilStats(std::vector<double> utils){
+    ctrl_.PrintUtilStats(utils);
 }
 } // namespace dramsim3

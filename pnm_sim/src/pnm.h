@@ -317,6 +317,8 @@ class PNM {
     float *ReadDensemmData(uint64_t hex_addr);
     float *ReadSparsemmData(uint64_t hex_addr);
 
+    void PrintUtilStats(std::vector<double> utils);
+
     void ScheduleInstruction();
     Transaction InstructionToTransaction(const Instruction inst);
 

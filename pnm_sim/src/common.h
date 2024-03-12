@@ -31,6 +31,7 @@
 
 //for 128x128 sys array
 #define DATA_CACHE_BYTE_SIZE        (256*256*16)//1MB cache
+//#define DATA_CACHE_BYTE_SIZE        (256*256*16*5)//5MB cache
 
 //caches just large enough to hold 128x256 32fp numbers
 #define ACT_INPUT_BUF_BYTE_SIZE     (128*256*4)//16kB cache

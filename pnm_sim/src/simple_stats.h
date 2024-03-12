@@ -22,6 +22,8 @@ class SimpleStats {
         epoch_vec_counters_[name][pos] += 1;
     }
 
+    void PrintUtilStats(std::vector<double> utils);
+
     // increment vec counter by number
     void IncrementVecBy(const std::string name, int pos, int num) {
         epoch_vec_counters_[name][pos] += num;
