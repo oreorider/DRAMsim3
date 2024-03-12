@@ -342,6 +342,7 @@ void Controller::PrintFinalStats() {
 }
 
 void Controller::PrintUtilStats(std::vector<double> utils){
+    printf("[CONTROLLER] print util stats\n");
     simple_stats_.PrintUtilStats(utils);
 }
 

@@ -61,7 +61,7 @@ SimpleStats::SimpleStats(const Config& config, int channel_id)
     InitVecStat("sref_energy", "vec_double", "SREF energy", "rank",
                 config_.ranks);
     InitVecStat("pnm_utilization", "vec_double", "PNM sys array utilization", "_",
-                config_.num_blocksp_kernels)
+                config_.num_blocksp_kernels);
 
     // Histogram stats
     InitHistoStat("read_latency", "Read request latency (cycles)", 0, 200, 10);
@@ -83,9 +83,14 @@ SimpleStats::SimpleStats(const Config& config, int channel_id)
 }
 
 void SimpleStats::PrintUtilStats(std::vector<double> utils){
-    for (int i = 0; i < utils.size(); i++){
+    printf("[SIMPLE STATS] print util stats");
+    for (int i = 0; i < (int)utils.size(); i++){
         vec_doubles_["pnm_utilization"][i] = utils[i];
     }
+    for(auto element : vec_doubles_["pnm_utilization"]){
+        printf("%f ", element);
+    }
+    printf("\n");
 }
 
 void SimpleStats::AddValue(const std::string name, const int value) {
@@ -210,6 +215,10 @@ void SimpleStats::InitVecStat(std::string name, std::string stat_type,
         vec_counters_.emplace(name, std::vector<uint64_t>(vec_len, 0));
         epoch_vec_counters_.emplace(name, std::vector<uint64_t>(vec_len, 0));
     } else if (stat_type == "vec_double") {
+        if(name == "pnm_utilization"){
+            printf("[SIMPLE STATS - InitVecStat] creating pnm utilization vec_double\n");
+            printf("vec_len: %u\n", vec_len);
+        }
         vec_doubles_.emplace(name, std::vector<double>(vec_len, 0));
     }
 }

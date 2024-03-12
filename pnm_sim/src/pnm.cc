@@ -1283,6 +1283,7 @@ void PNM::ExecuteSparseMatmul(){
             utils.push_back(utilization);
         }
         
+        printf("PRINT UTIL STATS\n");
         PrintUtilStats(utils);
         //printf("start clk: %u, end clk: %u, hardware busy clk cnt : %u\n",
         //start_clk, end_clk, hardware_busy_clk_cnt);
