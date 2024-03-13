@@ -119,7 +119,7 @@ int main(int argc, const char* argv[])
     Instruction *inst = new Instruction(config);
     printf("checkpoint3\n");
 
-    //return 0;
+    return 0;
 
     int num_trial = 0;
     int ax_time = 0, b_time = 0;
@@ -470,9 +470,9 @@ int main(int argc, const char* argv[])
 
             int num_inst_per_block = 0;
 
-            int tiledM = M/config->blk_sparse_dim;
-            int tiledK = K/config->blk_sparse_dim;
-            int tiledN = N/config->blk_sparse_dim;
+            int tiledM = M/config->blk_size;
+            int tiledK = K/config->blk_size;
+            int tiledN = N/config->blk_size;
 
             printf("tiledM: %u,  tiledK: %u, tiledN: %u\n",
             tiledM, tiledK, tiledN);
@@ -551,7 +551,7 @@ int main(int argc, const char* argv[])
 
             //write READ instructions
             for(auto ch: config->channel){
-                num_inst_per_block = config->blk_sparse_dim*config->blk_sparse_dim/16;
+                num_inst_per_block = config->blk_size*config->blk_size/16;
                 read_psum(
                     ch,
                     tiledM * tiledN * num_inst_per_block,

@@ -33,7 +33,7 @@ Config::Config(int argc, const char* argv[])
         ("act_dim",                po::value<string>(&act_dim_list)->default_value("32-64"),           "activation dimension ")
         ("weight_dim",             po::value<string>(&weight_dim_list)->default_value("64-64"),        "weight dimension")
         ("tile_size",              po::value<int>(&tile_size)->default_value(256),                     "tile size")
-        ("blk_sparse_dim",         po::value<int>(&blk_sparse_dim)->default_value(32),                 "block sparse dimension")
+        ("blk_size",               po::value<int>(&blk_size)->default_value(32),                 "block sparse dimension")
         ("density",                po::value<float>(&density)->default_value(99.0),                    "density")
         ("activation_sparse",      po::value<int>(&activation_sparse)->default_value(0),               "sparse activations")
         ;
@@ -58,13 +58,13 @@ Config::Config(int argc, const char* argv[])
 
     ra_size = rank.size();//2
 
-    if(blk_sparse_dim == 1){
+    if(blk_size == 1){
         sparse_mode = SparseMode::DIFFPRUNE;
     }
-    else if(blk_sparse_dim == 16){
+    else if(blk_size == 16){
         sparse_mode = SparseMode::BLOCK16;
     }
-    else if(blk_sparse_dim == 32){
+    else if(blk_size == 32){
         sparse_mode = SparseMode::BLOCK32;
     }
     else{
@@ -356,7 +356,9 @@ Config::Config(int argc, const char* argv[])
         num_inst.push_back(num_inst_cnt);//num inst per epoch
 
     }
-    else if(opcode == 2 && (sparse_mode == SparseMode::BLOCK32 || sparse_mode == SparseMode::BLOCK16)){
+    
+    //else if(opcode == 2 && (sparse_mode == SparseMode::BLOCK32 || sparse_mode == SparseMode::BLOCK16)){
+    else if(0){
         weight_dim  = split(weight_dim_list, '-');
         act_dim     = split(act_dim_list, '-');
 
@@ -586,6 +588,184 @@ Config::Config(int argc, const char* argv[])
         
         
     }
+    
+    else if(opcode == 2 && (sparse_mode == SparseMode::BLOCK32 || sparse_mode == SparseMode::BLOCK16)){
+        weight_dim  = split(weight_dim_list, '-');
+        act_dim     = split(act_dim_list, '-');
+
+        int M = act_dim[0];
+        int K = act_dim[1];
+        int N = weight_dim[1];
+
+        int num_inst_cnt = 0;
+        int tiledM = 0;
+        int tiledK = 0;
+        int tiledN = 0;
+
+        int blockM = 0;
+        int blockK = 0;
+        int blockN = 0;
+        int num_inst_per_block = 0;
+
+        set<unsigned> unique_vals;
+
+        int data_num = 0;
+
+        //tile coordinates (tile size is 256x256)
+        tiledM = M/tile_size;
+        tiledK = K/tile_size;
+        tiledN = N/tile_size;
+        int numTiledMult = tiledM * tiledK * tiledN;
+
+        if(blk_size == 16){
+            printf("BLOCK16\n");
+        }
+        else if(blk_size == 32){
+            printf("BLOCK32\n");
+        }
+        else{
+            cerr << "error: unsupported block size"<<endl;
+        }
+
+        num_inst_per_block = blk_size * blk_size / 16;
+        blockM = M / blk_size;
+        blockK = K / blk_size;
+        blockN = N / blk_size;
+
+        printf("tiledM: %u, tiledK: %u, tiledN: %u, numTiledMult: %u, num_inst_per_block: %u\n",
+        tiledM, tiledK, tiledN, numTiledMult, num_inst_per_block);
+
+        //std::vector<std::pair<int, int>> dense_block_idxs;
+        //std::vector<std::pair<int, int>> tmp_wgt_blk_idxs;
+        std::map<std::pair<int, int>, std::vector<int>> dense_blk_idxs;
+
+        int dense_blk_cnt = 0;
+        int expected_dense_blk_cnt = blockK * blockN * (density/100.);
+        int blk_per_tile = tile_size * tile_size / (blk_size * blk_size);
+        printf("expected dense blk cnt: %u\n", expected_dense_blk_cnt);
+
+        std::vector<std::vector<std::vector<std::vector<int>>>> activations(tiledM,
+            std::vector<std::vector<std::vector<int>>>(tiledK,
+                std::vector<std::vector<int>>(blk_per_tile, 
+                    std::vector<int>(num_inst_per_block))));
+
+        std::vector<std::vector<std::vector<std::vector<int>>>> weights(tiledK,
+            std::vector<std::vector<std::vector<int>>>(tiledN,
+                std::vector<std::vector<int>>(blk_per_tile, 
+                    std::vector<int>(num_inst_per_block))));
+
+        
+        printf("activations (dense)\n");
+        for(int i = 0; i < tiledM; i ++){
+            for(int j = 0; j < tiledK; j++){
+                for(int k = 0; k < blk_per_tile; k++){
+                    for(int l = 0; l < num_inst_per_block; l++){
+                        activations[i][j][k][l] = data_num;
+                        data_num+=1;
+                    }
+                }
+            }
+        }
+        int num_activations = data_num;
+    
+        printf("weights (sparse)\n");
+        int r = 0;
+        srand(time(NULL));
+        while(dense_blk_cnt != expected_dense_blk_cnt){
+            printf("expected blk cnt: %u\n", expected_dense_blk_cnt);
+            for(int i = 0; i < tiledK; i ++){
+                for(int j = 0; j < tiledN; j++){
+                    for(int k = 0; k < blk_per_tile; k++){
+                        r = rand() % 100;
+                        if(r <= density){
+                            dense_blk_cnt++;
+                            dense_blk_idxs[{i, j}].push_back(k);
+
+                            for(int l = 0; l < num_inst_per_block; l++){
+                                weights[i][j][k][l] = data_num;
+                                data_num+=1;
+                            }
+                        }
+                        else{
+                            for(int l = 0; l < num_inst_per_block; l++){
+                                weights[i][j][k][l] = 0;
+                            }
+                        }
+                        
+                    }
+                }
+            }
+            printf("dense blk cnt: %u\n", dense_blk_cnt);
+            if(dense_blk_cnt == expected_dense_blk_cnt){
+                printf("configuartion good\n");
+            }
+            else{
+                printf("retrying\n");
+                dense_blk_cnt = 0;
+                dense_blk_idxs.clear();
+            }
+        }
+        
+        //print dense blk idxs
+        for (const auto& pair_vec : dense_blk_idxs) {
+            printf("tile idx: (%d, %d), blk_num: ", pair_vec.first.first, pair_vec.first.second);
+                for (int value : pair_vec.second) {
+                    printf("%d ", value);
+                }
+            printf("\n");
+        }
+        
+        indices.resize(nepochs);
+        int num_dense_blk_in_tile = 0;
+        for(int epoch = 0; epoch < nepochs; epoch++){
+            printf("epoch: %u\n", epoch);
+            indices[epoch].resize(numTiledMult);
+
+            int tiledM_idx = 0;
+            int tiledK_idx = 0;
+            int tiledN_idx = 0;
+
+            for(int tiledMultCount = 0; tiledMultCount < numTiledMult; tiledMultCount++){   
+                tiledM_idx = tiledMultCount/(tiledK * tiledN);
+                tiledN_idx = (tiledMultCount - tiledM_idx * tiledK * tiledN)/tiledK;
+                tiledK_idx = tiledMultCount % tiledK;
+                //printf("tiledMultCount: %u, tiledM_idx: %u, tiledN_idx: %u, tiledK_idx: %u\n",
+                //tiledMultCount, tiledM_idx, tiledN_idx, tiledK_idx);             
+                
+                std::pair<int, int> tile_coord = {tiledK_idx, tiledN_idx};
+                num_dense_blk_in_tile = dense_blk_idxs[tile_coord].size();
+
+
+                indices[epoch][tiledMultCount].resize(num_dense_blk_in_tile);
+
+                printf("tiledMultCount: %u, tiledM_idx: %u, tiledN_idx: %u, tiledK_idx: %u\nnum dense blk in tile (%u, %u): %u\n",
+                        tiledMultCount, tiledM_idx, tiledN_idx, tiledK_idx, tiledK_idx, tiledN_idx, num_dense_blk_in_tile);
+                for(int blk_num_cnt = 0; blk_num_cnt < num_dense_blk_in_tile; blk_num_cnt++){
+                    //number of the block 0~64(BLOCK32) or 0~256(BLOCK16)
+                    int blk_num = dense_blk_idxs[tile_coord][blk_num_cnt];
+                    printf("blk_num_cnt: %u, blk_num: %u\n", blk_num_cnt, blk_num);
+
+                    for(int inst_cnt = 0; inst_cnt < num_inst_per_block; inst_cnt++){
+                        indices[epoch][tiledMultCount][blk_num_cnt].push_back(
+                            activations[tiledM_idx][tiledK_idx][blk_num][inst_cnt]
+                        );
+                        
+                        indices[epoch][tiledMultCount][blk_num_cnt].push_back(
+                            weights[tiledK_idx][tiledN_idx][blk_num][inst_cnt]
+                        );
+                        num_inst_cnt += 2;
+
+                    }
+                }
+            }
+        }
+
+        printf("total instructions: %u\n", num_inst_cnt);
+        batch_list.push_back(0);
+        num_inst.push_back(num_inst_cnt);
+        return;
+    }
+    
     else if(opcode == 2 && sparse_mode == SparseMode::DIFFPRUNE){
         printf("diffprune\n");
         weight_dim  = split(weight_dim_list, '-');
@@ -800,7 +980,7 @@ Config::Config(int argc, const char* argv[])
                 printf("tiledM_idx: %u, tiledN_idx: %u, tiledK_idx: %u\n",
                 tiledM_idx, tiledN_idx, tiledK_idx);
 
-                for(int batch = 0; batch < batch_size; batch++){
+                for(int batch = 0; batch < (int)batch_size; batch++){
                     printf("batch: %u\n", batch);
 
                     //if activation sparse, weight dense

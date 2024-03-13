@@ -7,6 +7,9 @@
 #include <fstream>
 #include <boost/program_options.hpp>
 #include <time.h>
+#include <map>
+#include <vector>
+
 
 #define INST_BUFFER_BYTE_SIZE (1024 * 1024 * 20)//20MB inst buffer
 #define PNM_INST_BUF_START 0
@@ -58,7 +61,7 @@ class Config {
     //modifications for sparsemm
     enum class SparseMode {BLOCK32, BLOCK16, DIFFPRUNE, OTHER};
     SparseMode sparse_mode;
-    int blk_sparse_dim;
+    int blk_size;
     float density;
     vector<unsigned> num_dense_blk;
     std::map<std::string, int> inst_tile_info;
