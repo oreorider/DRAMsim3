@@ -5,8 +5,8 @@
 using namespace dramsim3;
 
 int main(int argc, const char **argv) {
-    //printf("console output closed\n");
-    //fclose(stdout);
+    printf("console output closed\n");
+    fclose(stdout);
     args::ArgumentParser parser(
         "CXL-PNM SIMULATOR using Dramsim3.",
         "Examples: \n."

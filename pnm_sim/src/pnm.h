@@ -299,6 +299,7 @@ class PNM {
     int sys_array_start_clk;
     int sys_array_end_clk;
 
+    int cycles_stalled;
 
 
     //used to show which iteration of matmul we are on

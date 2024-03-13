@@ -303,9 +303,16 @@ Config::Config(int argc, const char* argv[])
                 printf("tiledMultCount: %u\n", tiledMultCount);
                 indices[epoch][tiledMultCount].resize(batch_size);
 
-                tiledM_idx = tiledMultCount/(tiledK * tiledN);
-                tiledN_idx = (tiledMultCount - tiledM_idx * tiledK * tiledN)/tiledK;
+
+                //increases weight cache hits
+                tiledM_idx = (tiledMultCount / tiledK) % tiledM;
+                tiledN_idx = tiledMultCount / (tiledK * tiledM);
                 tiledK_idx = tiledMultCount % tiledK;
+
+                //increases activation cache hits (useless)
+                //tiledM_idx = tiledMultCount/(tiledK * tiledN);
+                //tiledN_idx = (tiledMultCount - tiledM_idx * tiledK * tiledN)/tiledK;
+                //tiledK_idx = tiledMultCount % tiledK;
 
                 //printf("tiledMultCount: %u\n", tiledMultCount);
                 printf("tiledM_idx: %u, tiledN_idx: %u, tiledK_idx: %u\n",
@@ -523,10 +530,9 @@ Config::Config(int argc, const char* argv[])
         //    
         //}
 
-        
         for(int epoch = 0; epoch < nepochs; epoch++){
             printf("epoch: %u\n", epoch);
-            indices[epoch].resize(numBlockMult);
+            indices[epoch].resize(numBlockMult);   
             
             int tiledM_idx = 0;
             int tiledK_idx = 0;
@@ -642,7 +648,8 @@ Config::Config(int argc, const char* argv[])
         int dense_blk_cnt = 0;
         int expected_dense_blk_cnt = blockK * blockN * (density/100.);
         int blk_per_tile = tile_size * tile_size / (blk_size * blk_size);
-        printf("expected dense blk cnt: %u\n", expected_dense_blk_cnt);
+        printf("blk_per_tile: %u, expected dense blk cnt: %u\n", 
+        blk_per_tile, expected_dense_blk_cnt);
 
         std::vector<std::vector<std::vector<std::vector<int>>>> activations(tiledM,
             std::vector<std::vector<std::vector<int>>>(tiledK,
@@ -708,15 +715,16 @@ Config::Config(int argc, const char* argv[])
         
         //print dense blk idxs
         for (const auto& pair_vec : dense_blk_idxs) {
-            printf("tile idx: (%d, %d), blk_num: ", pair_vec.first.first, pair_vec.first.second);
+            printf("tile idx: (%d, %d), blk_idx: ", pair_vec.first.first, pair_vec.first.second);
                 for (int value : pair_vec.second) {
                     printf("%d ", value);
                 }
             printf("\n");
         }
         
+        num_dense_blk.push_back(0);
         indices.resize(nepochs);
-        int num_dense_blk_in_tile = 0;
+        //int num_dense_blk_in_tile = 0;
         for(int epoch = 0; epoch < nepochs; epoch++){
             printf("epoch: %u\n", epoch);
             indices[epoch].resize(numTiledMult);
@@ -726,32 +734,52 @@ Config::Config(int argc, const char* argv[])
             int tiledN_idx = 0;
 
             for(int tiledMultCount = 0; tiledMultCount < numTiledMult; tiledMultCount++){   
-                tiledM_idx = tiledMultCount/(tiledK * tiledN);
-                tiledN_idx = (tiledMultCount - tiledM_idx * tiledK * tiledN)/tiledK;
+                //to increase weight cache hits
+                tiledM_idx = (tiledMultCount / tiledK) % tiledM;
+                tiledN_idx = tiledMultCount / (tiledK * tiledM);
                 tiledK_idx = tiledMultCount % tiledK;
+                
+                //to increase activation cache hits
+                //tiledM_idx = tiledMultCount/(tiledK * tiledN);
+                //tiledN_idx = (tiledMultCount - tiledM_idx * tiledK * tiledN)/tiledK;
+                //tiledK_idx = tiledMultCount % tiledK;
                 //printf("tiledMultCount: %u, tiledM_idx: %u, tiledN_idx: %u, tiledK_idx: %u\n",
                 //tiledMultCount, tiledM_idx, tiledN_idx, tiledK_idx);             
                 
                 std::pair<int, int> tile_coord = {tiledK_idx, tiledN_idx};
-                num_dense_blk_in_tile = dense_blk_idxs[tile_coord].size();
+                
+                //number of dense blocks in tile
+                int num_dense_blk_in_tile = dense_blk_idxs[tile_coord].size();
+                //number of block multiplications that take place in the tile
+                int numBlockMult = num_dense_blk_in_tile * blockM;
+                num_dense_blk.push_back(numBlockMult);
 
 
-                indices[epoch][tiledMultCount].resize(num_dense_blk_in_tile);
+                indices[epoch][tiledMultCount].resize(numBlockMult);
 
-                printf("tiledMultCount: %u, tiledM_idx: %u, tiledN_idx: %u, tiledK_idx: %u\nnum dense blk in tile (%u, %u): %u\n",
-                        tiledMultCount, tiledM_idx, tiledN_idx, tiledK_idx, tiledK_idx, tiledN_idx, num_dense_blk_in_tile);
-                for(int blk_num_cnt = 0; blk_num_cnt < num_dense_blk_in_tile; blk_num_cnt++){
+                printf("activation (%u, %u)\n", tiledM_idx, tiledK_idx);    
+                printf("weight tile (%u, %u) num dense blk : %u, numBlockMult: %u\n",
+                tiledK_idx, tiledN_idx, num_dense_blk_in_tile, numBlockMult);
+                
+                printf("tiledMultCount: %u, tiledM_idx: %u, tiledN_idx: %u, tiledK_idx: %u\n",
+                tiledMultCount, tiledM_idx, tiledN_idx, tiledK_idx);
+
+                //from 0 to total number of blockmults
+                for(int blockMultCount = 0; blockMultCount < numBlockMult; blockMultCount++){
+                    //nth block in tile
+                    int nth_dense_block = blockMultCount%num_dense_blk_in_tile;
                     //number of the block 0~64(BLOCK32) or 0~256(BLOCK16)
-                    int blk_num = dense_blk_idxs[tile_coord][blk_num_cnt];
-                    printf("blk_num_cnt: %u, blk_num: %u\n", blk_num_cnt, blk_num);
+                    int blk_idx = dense_blk_idxs[tile_coord][nth_dense_block];
+                    printf("blockMultCount: %u, nth_dense_block: %u, blk_idx: %u\n", 
+                    blockMultCount, nth_dense_block, blk_idx);
 
                     for(int inst_cnt = 0; inst_cnt < num_inst_per_block; inst_cnt++){
-                        indices[epoch][tiledMultCount][blk_num_cnt].push_back(
-                            activations[tiledM_idx][tiledK_idx][blk_num][inst_cnt]
+                        indices[epoch][tiledMultCount][blockMultCount].push_back(
+                            activations[tiledM_idx][tiledK_idx][blk_idx][inst_cnt]
                         );
                         
-                        indices[epoch][tiledMultCount][blk_num_cnt].push_back(
-                            weights[tiledK_idx][tiledN_idx][blk_num][inst_cnt]
+                        indices[epoch][tiledMultCount][blockMultCount].push_back(
+                            weights[tiledK_idx][tiledN_idx][blk_idx][inst_cnt]
                         );
                         num_inst_cnt += 2;
 
@@ -763,7 +791,7 @@ Config::Config(int argc, const char* argv[])
         printf("total instructions: %u\n", num_inst_cnt);
         batch_list.push_back(0);
         num_inst.push_back(num_inst_cnt);
-        return;
+        //return;
     }
     
     else if(opcode == 2 && sparse_mode == SparseMode::DIFFPRUNE){

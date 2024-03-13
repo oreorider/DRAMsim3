@@ -119,7 +119,7 @@ int main(int argc, const char* argv[])
     Instruction *inst = new Instruction(config);
     printf("checkpoint3\n");
 
-    return 0;
+    //return 0;
 
     int num_trial = 0;
     int ax_time = 0, b_time = 0;
@@ -470,21 +470,25 @@ int main(int argc, const char* argv[])
 
             int num_inst_per_block = 0;
 
-            int tiledM = M/config->blk_size;
-            int tiledK = K/config->blk_size;
-            int tiledN = N/config->blk_size;
+            int tiledM = M/config->tile_size;
+            int tiledK = K/config->tile_size;
+            int tiledN = N/config->tile_size;
 
             printf("tiledM: %u,  tiledK: %u, tiledN: %u\n",
             tiledM, tiledK, tiledN);
 
-            int numBlockMult = config->num_dense_blk[0] * tiledM;
+            int numTiledMult = tiledM * tiledK * tiledN;
+            //int numBlockMult = config->num_dense_blk[0];
             bool cache_hit = 0;
             int output_idx = 0;
             
             unsigned num_batches = config->batch_list.back();
-            unsigned num_inst_per_batch = config->indices[0][0][0].size();
-            printf("DEUBG: num_batches: %u, num_inst_per_batch: %u\n",
-            num_batches, num_inst_per_batch);
+            //num instructions per block mult (is constant)
+            unsigned num_inst_per_blk_mult = config->indices[0][0][0].size();
+            //num block mult in a specific tile (is not constant)
+            int numBlockMult = 0;
+            printf("DEUBG: num_batches: %u, num_inst_per_blk_mult: %u\n",
+            num_batches, num_inst_per_blk_mult);
             
             printf("BLOCKSPARSE instructions\n");
             for(int epoch = 0; epoch < config->nepochs; epoch++) {
@@ -506,25 +510,27 @@ int main(int argc, const char* argv[])
                             config).GetHexAddress(),
                         num_inst
                         );
-                        for(int blockMultCount = 0; blockMultCount < numBlockMult; blockMultCount++){
-                            for(unsigned b_id = 0; b_id < num_batches; b_id++){
-                                for(unsigned ll = 0; ll < num_inst_per_batch; ll++){
+                        for(int tiledMultCount = 0; tiledMultCount < numTiledMult; tiledMultCount++){
+                            numBlockMult = config->indices[epoch][tiledMultCount].size();
+                            printf("tiledMultCount: %u, numBlockMult: %u\n",
+                            tiledMultCount, numBlockMult);
+                            for(int blockMultCount = 0; blockMultCount < numBlockMult; blockMultCount++){
+                                for(int inst_cnt = 0; inst_cnt < (int)num_inst_per_blk_mult; inst_cnt++){
                                     cache_hit = false;
                                     addr -> reset(
                                         ch,
-                                        (config->indices[epoch][blockMultCount]
-                                        [b_id][ll]) * config->data_size,
+                                        (config->indices[epoch][tiledMultCount][blockMultCount][inst_cnt])
+                                        * config->data_size,
                                         config
                                     );
-                                    //addr->to_string();
-
+                                    
                                     write_base(
                                         config,
                                         addr->GetHexAddress(),
                                         b_time
                                     );
 
-                                    if(ll%2 == 0){
+                                    if(inst_cnt % 2 == 0){
                                         cache_hit = false;
                                     }
                                     else{
@@ -551,10 +557,12 @@ int main(int argc, const char* argv[])
 
             //write READ instructions
             for(auto ch: config->channel){
+                int blockM = M / config->blk_size;
+                int blockN = N / config->blk_size;
                 num_inst_per_block = config->blk_size*config->blk_size/16;
                 read_psum(
                     ch,
-                    tiledM * tiledN * num_inst_per_block,
+                    blockM * blockN * num_inst_per_block,
                     config,
                     ax_time
                 );
