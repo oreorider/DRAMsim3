@@ -1442,6 +1442,9 @@ void PNM::ExecuteDenseMatmul(){
         start_clk, end_clk, hardware_busy_clk_cnt);
         printf("num cycles that added to buf: %u\n", add_to_buf_cnt);
 
+        std::vector<double>utils;
+        utils.push_back(utilization);
+        PrintUtilStats(utils);
 
         //std::ofstream txt_out(config_.txt_stats_name, std::ofstream::out);
         //txt_out << "hardware_utilization: \t" << std::to_string(utilization) << std::endl;

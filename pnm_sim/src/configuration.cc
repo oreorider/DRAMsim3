@@ -144,12 +144,12 @@ void Config::InitDRAMParams() {
 
     //determines if block32, block16, or diffprune
     //for BLOCK32
-    sparsemm_blk_size           = 32;
-    num_blocksp_kernels         = 12;
+    //sparsemm_blk_size           = 32;
+    //num_blocksp_kernels         = 12;
 
     //for BLOCk16
-    //sparsemm_blk_size           = 16;
-    //num_blocksp_kernels         = 12;
+    sparsemm_blk_size           = 16;
+    num_blocksp_kernels         = 30;
 
     //for DIFFPRUNE
     //sparsemm_blk_size         = 1;
