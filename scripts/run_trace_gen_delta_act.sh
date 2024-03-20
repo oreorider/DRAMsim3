@@ -16,19 +16,12 @@ configs="$(python3 parse_configs_for_trace_gen.py ${config_file})"
 params="
     --opcode 3
     --nepochs 1
-    --batch_size 1
-    --embedding_table 1000000-1000000
-    --sparse_feature_size 16
-    --data_type_size 4
-    --pooling_type 0
-    --default_interval 4
-    --miss_ratio 100
+    --batch_size 4
     --base_only false
     --file_name test
     --act_dim 512-768
     --weight_dim 768-768
     --tile_size 256
-    --blk_size 16
     --density 20
 "
 

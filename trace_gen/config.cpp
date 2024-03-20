@@ -788,8 +788,8 @@ Config::Config(int argc, const char* argv[])
         printf("tiledM: %u,  tiledK: %u, tiledN: %u, numTiledMult: %u\n",
         tiledM, tiledK, tiledN, numTiledMult);
 
-        //int num_inst_per_sp_tile = (tile_size * tile_size / 16) * (density/100.);
-        int num_inst_per_sp_tile = 0;
+        //num_inst_per_sp_tile = (tile_size * tile_size / 16) * (density/100.);
+        num_inst_per_sp_tile = 0;
         if(activation_sparse == 1){
             //(256 * 256 / 8) * 0.2 = 1638.4
             num_inst_per_sp_tile = 1638;
@@ -799,7 +799,7 @@ Config::Config(int argc, const char* argv[])
             //num_inst_per_sp_tile = (tile_size * tile_size / 8) * (density/100.);
             num_inst_per_sp_tile = 82;
         }
-        int num_inst_per_dense_tile = tile_size * tile_size / 16;
+        num_inst_per_dense_tile = tile_size * tile_size / 16;
 
         inst_tile_info.insert(std::pair<std::string, int>("dense", num_inst_per_dense_tile));
         inst_tile_info.insert(std::pair<std::string, int>("sparse", num_inst_per_sp_tile));
@@ -1151,11 +1151,11 @@ Config::Config(int argc, const char* argv[])
         tiledM, tiledK, tiledN, numTiledMult);
 
         //inst per dense tile
-        int num_inst_per_dense_tile = tile_size * tile_size / 16;
+        num_inst_per_dense_tile = tile_size * tile_size / 16;
         printf("num inst per dense tile: %u\n", num_inst_per_dense_tile);
 
         //inst per sparse tile. sparse matrix stored as CSR, so each instruction corresponds to 8 elements
-        int num_inst_per_sp_tile    = (tile_size * tile_size * (density/100.)) / 8;
+        num_inst_per_sp_tile    = (tile_size * tile_size * (density/100.)) / 8;
         printf("num inst per sp tile: %u\n", num_inst_per_sp_tile);
 
         //activations stored in CSR
@@ -1200,7 +1200,9 @@ Config::Config(int argc, const char* argv[])
 
             for(int tiledMultCount = 0; tiledMultCount < numTiledMult; tiledMultCount++){
                 printf("tiledMultCount: %u\n", tiledMultCount);
-                indices[epoch][tiledMultCount].resize(4);
+
+                //batch_size = 4 (always, or else it doesnt work)
+                indices[epoch][tiledMultCount].resize(batch_size);
                 
                 tiledM_idx = (tiledMultCount / tiledK) % tiledM;
                 tiledN_idx = tiledMultCount / (tiledK * tiledM);
@@ -1209,7 +1211,7 @@ Config::Config(int argc, const char* argv[])
                 printf("tiledM_idx: %u, tiledN_idx: %u, tiledK_idx: %u\n",
                 tiledM_idx, tiledN_idx, tiledK_idx);
 
-                for(unsigned batch = 0; batch < 4; batch++){
+                for(unsigned batch = 0; batch < batch_size; batch++){
                     printf("batch: %u\n",batch);
                     int act_inst_start = 0;
                     int act_inst_end = 0;

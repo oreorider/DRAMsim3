@@ -74,6 +74,8 @@ class Config {
     vector<unsigned> act_dim;
     vector<unsigned> weight_dim;
     vector<unsigned> num_inst;
+    int num_inst_per_dense_tile;
+    int num_inst_per_sp_tile;
 
     int num_tables; 
     vector<unsigned> tables;

@@ -138,7 +138,7 @@ int main(int argc, const char* argv[])
     Instruction *inst = new Instruction(config);
     printf("checkpoint3\n");
 
-    return 0;
+    //return 0;
 
     int num_trial = 0;
     int ax_time = 0, b_time = 0;
@@ -589,7 +589,93 @@ int main(int argc, const char* argv[])
         
         }
     }
+    else if (config->opcode == 3){// delta_act
+        printf("delta ACT instructions\n");
+        int M = config->act_dim[0];
+        int K = config->act_dim[1];
+        int N = config->weight_dim[1];
 
+        int tiledM = M/config->tile_size;
+        int tiledK = K/config->tile_size;
+        int tiledN = N/config->tile_size;
+
+        unsigned num_batches = config->batch_list.back();
+        unsigned num_inst_per_batch = config->indices[0][0][0].size();
+
+        int output_idx = 0;
+        int numTiledMult = 0;
+        bool is_weight = false;
+
+        for(int epoch = 0; epoch < config->nepochs; epoch++){
+            for(auto ch: config->channel){
+                for(auto num_inst : config->num_inst){
+                    numTiledMult = tiledM * tiledK * tiledN;
+                    
+                    printf("init instruction\n");
+                    inst->init(
+                        Address(
+                            ch,
+                            true,
+                            PNM_INST_BUF_START,
+                            config
+                            ).GetPNMAddress(),
+                        Address(
+                            ch,
+                            true,
+                            PNM_CONFIG_REG_START + PNM_EXE_REG_OFFSET,
+                            config).GetHexAddress(),
+                        num_inst
+                    );
+                    for(int tiledMultCount = 0; tiledMultCount < numTiledMult; tiledMultCount++){
+                        for(unsigned b_id = 0; b_id < num_batches; b_id++){
+                            for(unsigned ll = 0; ll < num_inst_per_batch; ll++){
+                                addr -> reset(
+                                    ch,
+                                    (config->indices[epoch][tiledMultCount]
+                                    [b_id][ll]) * config->data_size,
+                                    config
+                                );
+
+                                write_base(
+                                    config,
+                                    addr->GetHexAddress(),
+                                    b_time
+                                );
+
+                                output_idx = 0;
+
+                                //activations
+                                if(ll < config->num_inst_per_sp_tile){
+                                    is_weight = false;
+                                }
+                                else{
+                                    is_weight = true;
+                                }
+
+                                inst->write_instruction(
+                                    config->opcode,
+                                    is_weight,
+                                    output_idx,
+                                    addr,
+                                    config->cxlpnm_out,
+                                    ax_time
+                                );
+
+                            }
+                        }
+                    }
+                }
+            }
+            for(auto ch: config->channel){
+                read_psum(
+                    ch,
+                    tiledM * tiledN * 4096,
+                    config,
+                    ax_time
+                );
+            }
+        }
+    }
     else{
         assert(false);
     }

@@ -153,7 +153,7 @@ void Instruction::write_instruction(
         std::ofstream &trc,
         int &time)
 {
-    assert(opcode == 0 || opcode == 1 || opcode == 2);
+    assert(opcode == 0 || opcode == 1 || opcode == 2 || opcode == 3);
 
     bool trace_end = num_instruction == (total_instruction - 1) ? true : false;
  
