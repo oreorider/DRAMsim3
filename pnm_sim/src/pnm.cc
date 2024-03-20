@@ -71,6 +71,23 @@ Instruction::Instruction(uint64_t inst_data, int channel_id,
                      ((inst_data & ch_addr_mask) << config_p->shift_bits),
                      config_p);
     }
+    else if(opcode == Opcode::ACTIVATION){
+        cache_hit       = static_cast<bool>((inst_data >> 61) & 0x1);
+        //sparsemm_idx instead
+        sparsemm_idx    = static_cast<int>((inst_data >> 49) & 0xfff);
+        trace_end       = static_cast<bool>((inst_data >> 48) & 0x1);
+        type            = static_cast<DataType>((inst_data >> 47) & 0x1);
+        input_idx       = static_cast<int>((inst_data >> 43) & 0xf);
+
+        int ch_addr_bits = config_p->addr_bits
+                           - config_p->shift_bits
+                           - config_p->ch_bits;
+        uint64_t ch_addr_mask = (((uint64_t)1 << ch_addr_bits) - 1);
+        addr       = Address(channel_id,
+                     static_cast<uint64_t>
+                     ((inst_data & ch_addr_mask) << config_p->shift_bits),
+                     config_p);
+    }
     else {
         std::cerr << "unknown opcode" << (int)opcode << std::endl;
         AbruptExit(__FILE__, __LINE__);
@@ -326,8 +343,8 @@ bool PNM::Done() {
 
 void PNM::ClockTick() {
     //set to stop when 0xcafe 
-    if(0){
-    //if(clk_ > 500000){
+    //if(0){
+    if(clk_ > 300000){
         std::cerr << "FORCE STOP" << std::endl;
         AbruptExit(__FILE__, __LINE__);
     }
@@ -379,7 +396,8 @@ void PNM::ClockTick() {
     }
 
     // 4. Instruction fetch -> Send to controller
-    if(return_queue_.size() < 4096 && program_count != -1){
+    //if(return_queue_.size() < 4096 && program_count != -1){
+    if(program_count != -1){
     //if(return_queue_.size() < 500){
         //printf("schedule instruction\n");
         ScheduleInstruction();
@@ -714,6 +732,9 @@ void PNM::ScheduleInstruction() {
         else if(it->second.opcode == Opcode::SPARSE){
             printf("opcode : SPARSE, sparsemm_idx: 0x%x ", it->second.sparsemm_idx);
         }
+        else if(it->second.opcode == Opcode::ACTIVATION){
+            printf("opcode : ACTIVATION, sparsemm_idx: 0x%x ", it->second.sparsemm_idx);
+        }
         printf("hex_addr: 0x%lx\n", it->second.hex_addr);
 
 
@@ -737,7 +758,7 @@ void PNM::ScheduleInstruction() {
             else{
                 printf("[SCHEDULE INST - CACHE HIT] weight cache hit\n");
             }    
-            printf("[SCHEDULE INST] %lx\n", it->second.hex_addr);
+            printf("[SCHEDULE INST] addr: %lx\n", it->second.hex_addr);
             // = max cache queue size
             //add Instruction to cache_q
             printf("[SCHEDULE INST] cache q size: %lu\n", cache_q_.size());
@@ -892,10 +913,10 @@ void PNM::ReturnDataReady() {
     //1) double buffers filled
     //2) end of queue
     //3) instruction not valid
+    auto inst = return_queue_.begin();
+    auto next_inst = inst++;
     while(1){
-        auto inst = return_queue_.begin();
-        //printing return queue        
-
+        printf("[RETURN DATA READY] inst addr: %lu, next inst addr: %lu\n", inst->hex_addr, next_inst->hex_addr);
         if(dense_.size() >= 2){
             printf("[RETURN DATA READY] dense double buffers all filled, try again later\n");
             return;
@@ -915,9 +936,9 @@ void PNM::ReturnDataReady() {
 
         //instruction is not yet valid
         else if(inst->complete_cycle > clk_){
-        //    printf("first instruction (hex_addr: 0x%lx, complete cycle: %lu) not yet valid\n",
-        //    inst->hex_addr, inst->complete_cycle);
-            return;
+            inst = next_inst;
+            next_inst = next_inst++;
+            continue;
         }
         else{
             printf("\n");
@@ -983,7 +1004,7 @@ void PNM::ReturnDataReady() {
             //if either buffer not filled, fill them
             if(sys_arr_input_act_idx != 256*128 || sys_arr_input_wgt_idx != 256*128){
                 //if act
-                if(inst->cache_hit == 0){
+                if(inst->cache_hit == 0 && sys_arr_input_act_idx != 256*128){
                     printf("[RETURN DATA READY] activation added to idx: %u\n", sys_arr_input_act_idx);
                     for(int i = 0; i < config_.densemm_feature_size; i++){
                         sys_arr_input_act_buf[sys_arr_input_act_idx + i] = inst->data[i];
@@ -992,7 +1013,7 @@ void PNM::ReturnDataReady() {
                 }
 
                 //if weight
-                else{
+                else if(inst->cache_hit == 1 && sys_arr_input_wgt_idx != 256*128){
                     printf("[RETURN DATA READY] weight added to idx: %u\n", sys_arr_input_wgt_idx);
                     for(int i = 0; i < config_.densemm_feature_size; i++){
                         sys_arr_input_wgt_buf[sys_arr_input_wgt_idx + i] = inst->data[i];
@@ -1029,16 +1050,16 @@ void PNM::ReturnDataReady() {
             
             //fill buffer 
             if(block_sp_input_act_idx != num_block_sp_input || block_sp_input_wgt_idx != num_block_sp_input){
-                if(inst->cache_hit == 0){//if act
-                    printf("[RETURN DATA READY] activation, idx: %u\n", block_sp_input_act_idx);
+                if(inst->cache_hit == 0 && block_sp_input_act_idx != num_block_sp_input){//if act
+                    printf("[RETURN DATA READY] add to buffer - activation, idx: %u\n", block_sp_input_act_idx);
                     for(int i = 0; i < config_.sparsemm_feature_size; i++){
                         block_sp_input_act_buf[block_sp_input_act_idx + i] = inst->data[i];
                     }
                     block_sp_input_act_idx += config_.sparsemm_feature_size;
                 }
 
-                else{//if weight
-                printf("[RETURN DATA READY] weight added to idx: %u\n", block_sp_input_wgt_idx);
+                else if(inst->cache_hit == 1 && block_sp_input_wgt_idx != num_block_sp_input){//if weight
+                    printf("[RETURN DATA READY] add to buffer - weight, idx: %u\n", block_sp_input_wgt_idx);
                     for(int i = 0; i < config_.sparsemm_blk_size; i++){
                         block_sp_input_wgt_buf[block_sp_input_wgt_idx + i] = inst->data[i];
                     }
@@ -1103,6 +1124,10 @@ void PNM::ReturnDataReady() {
 
         }
 
+        else if(inst->opcode == Opcode::ACTIVATION){
+
+        }
+
         else {
             std::cerr << "unknown opcode" << (int)inst->opcode << std::endl;
             AbruptExit(__FILE__, __LINE__);
@@ -1111,6 +1136,9 @@ void PNM::ReturnDataReady() {
         //remove from return_queue_
         printf("[RETURN DATA READY] removing from return_queue hex_addr: 0x%lx\n", inst->hex_addr);
         return_queue_.erase(inst);
+        printf("[RETURN DATA READY] return queue size: %lu\n", return_queue_.size());
+        inst = next_inst;
+        next_inst = next_inst++;
     }
 
 }

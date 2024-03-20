@@ -9,7 +9,7 @@
 
 namespace dramsim3 {
 
-enum class Opcode {SUM, DENSE, SPARSE, SIZE, DUMMY};
+enum class Opcode {SUM, DENSE, SPARSE, ACTIVATION, SIZE, DUMMY};
 enum class PNMRegister {INSTRUCTION, PSUM, DENSEMM, SPARSEMM};
 enum class DataType {INPUT, WEIGHT, SIZE};
 
@@ -229,6 +229,7 @@ class PNM {
     std::vector<AdderElement> adder_;
     std::vector<DenseMatmulElement> dense_;
     std::vector<SparseMatmulElement> sparse_;
+    std::vector<DenseMatmulElement> delta_act_;
 
     std::vector<float*> input_cache_;
 
