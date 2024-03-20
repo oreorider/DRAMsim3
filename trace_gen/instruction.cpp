@@ -67,6 +67,26 @@ Instruction::Instruction(const Config *config_p_)
     bit_width_tmp.clear(); 
     start_tmp.clear();
 
+
+    ////////////////// opcode = 3 /////////////////////
+    int bit_width_3[5]  = {2, 1, 12, 1, ch_addr_bits};
+    int start_3[5]      = {62, 61, 49, 48, 0};
+    field_size.push_back(sizeof(bit_width_3) / sizeof(int));
+    printf("field_size[3] content: %u\n", field_size.back()); 
+
+    for(int i = 0; i < field_size[3]; i++){
+        bit_width_tmp.push_back(bit_width_3[i]);
+        start_tmp.push_back(start_3[i]);
+    }
+
+    bit_width.push_back(bit_width_tmp);
+    start.push_back(start_tmp);
+
+    bit_width_tmp.clear(); 
+    start_tmp.clear();
+
+
+
     //printf("printing bit_width[0]\n");
     //for(auto& element : bit_width[0]){
     //    printf("%u ", element);

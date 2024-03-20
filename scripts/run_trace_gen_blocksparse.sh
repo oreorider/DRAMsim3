@@ -28,7 +28,7 @@ params="
     --act_dim 512-768
     --weight_dim 768-3072
     --tile_size 256
-    --blk_sparse_dim 16
+    --blk_size 16
     --density 20
 "
 

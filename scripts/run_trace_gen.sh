@@ -24,8 +24,8 @@ params="
     --miss_ratio 100
     --base_only false
     --file_name test
-    --act_dim 512-3072
-    --weight_dim 3072-768
+    --act_dim 512-768
+    --weight_dim 768-768
     --tile_size 256
 "
 

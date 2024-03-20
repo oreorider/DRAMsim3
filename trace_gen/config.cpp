@@ -204,6 +204,7 @@ Config::Config(int argc, const char* argv[])
         //}
         //printf("\n");
     }
+    
     else if(opcode == 1){
         weight_dim  = split(weight_dim_list, '-');
         act_dim     = split(act_dim_list, '-');
@@ -435,26 +436,6 @@ Config::Config(int argc, const char* argv[])
                     data_num +=1;
                     //printf("%u ", activations[i][j][k]);
                 }
-                //fill in 32x32 block
-                //if(1){
-                //    int k = 0;
-                //    while(k < num_inst_per_block){
-                //        unsigned act_val = rand() % 1000000;
-                //        if(unique_vals.find(act_val) == unique_vals.end()){
-                //            activations[i][j][k] = act_val;
-                //            k++;
-                //            unique_vals.insert(act_val);
-                //            //printf("%u ", act_val);
-                //        }
-                //    }
-                //    //printf("\n");
-                //}
-                ////keep as 0
-                //else{
-                //    for(int k = 0; k < num_inst_per_block; k++){
-                //        activations[i][j][k] = 0;
-                //    }
-                //}
             }
         }
 
@@ -478,16 +459,6 @@ Config::Config(int argc, const char* argv[])
                         dense_blk_cnt++;
                         //dense_block_idxs.push_back(std::pair<int, int>(i,j));
                         tmp_wgt_blk_idxs.push_back(std::pair<int, int>(i,j));
-                        //int k = 0;
-                        //while(k < num_inst_per_block){
-                        //    unsigned wgt_val = rand() % 1000000;
-                        //    if(unique_vals.find(wgt_val) == unique_vals.end()){
-                        //        weights[i][j][k] = wgt_val;
-                        //        k++;
-                        //        unique_vals.insert(wgt_val);
-                        //        //printf("%u ", wgt_val);
-                        //    }
-                        //}
                         for(int k = 0; k < num_inst_per_block; k++){
                             weights[i][j][k] = data_num;
                             data_num += 1;
@@ -596,6 +567,7 @@ Config::Config(int argc, const char* argv[])
     }
     
     else if(opcode == 2 && (sparse_mode == SparseMode::BLOCK32 || sparse_mode == SparseMode::BLOCK16)){
+    //else if(0){
         weight_dim  = split(weight_dim_list, '-');
         act_dim     = split(act_dim_list, '-');
 
@@ -721,7 +693,7 @@ Config::Config(int argc, const char* argv[])
                 }
             printf("\n");
         }
-        
+        int totalBlockMult = 0;
         num_dense_blk.push_back(0);
         indices.resize(nepochs);
         //int num_dense_blk_in_tile = 0;
@@ -751,9 +723,9 @@ Config::Config(int argc, const char* argv[])
                 //number of dense blocks in tile
                 int num_dense_blk_in_tile = dense_blk_idxs[tile_coord].size();
                 //number of block multiplications that take place in the tile
-                int numBlockMult = num_dense_blk_in_tile * blockM;
-                num_dense_blk.push_back(numBlockMult);
-
+                int numBlockMult = num_dense_blk_in_tile * (tile_size/blk_size);
+                totalBlockMult += numBlockMult;
+                
 
                 indices[epoch][tiledMultCount].resize(numBlockMult);
 
@@ -787,6 +759,8 @@ Config::Config(int argc, const char* argv[])
                 }
             }
         }
+        num_dense_blk.push_back(totalBlockMult);
+        printf("total block multiplications: %u\n", totalBlockMult);
 
         printf("total instructions: %u\n", num_inst_cnt);
         batch_list.push_back(0);
@@ -1153,6 +1127,150 @@ Config::Config(int argc, const char* argv[])
         num_inst.push_back(num_inst_cnt);
 
     }   
+    
+    //delta activations, fixed to 20%
+    else if(opcode == 3){
+        weight_dim  = split(weight_dim_list, '-');
+        act_dim     = split(act_dim_list, '-');
+
+        int M = act_dim[0];
+        int K = act_dim[1];
+        int N = weight_dim[1];
+        printf("M: %u, K: %u, N: %u\n", M, K, N);
+        //[MxK] * [KxN] = [MxN] matrix mult
+        //split into 16x16
+        int tiledM = M/tile_size;
+        int tiledK = K/tile_size;
+        int tiledN = N/tile_size;
+
+        int num_inst_cnt = 0;
+        int data_num = 0;
+
+        int numTiledMult = tiledM * tiledK * tiledN;
+        printf("tiledM: %u,  tiledK: %u, tiledN: %u, numTiledMult: %u\n",
+        tiledM, tiledK, tiledN, numTiledMult);
+
+        //inst per dense tile
+        int num_inst_per_dense_tile = tile_size * tile_size / 16;
+        printf("num inst per dense tile: %u\n", num_inst_per_dense_tile);
+
+        //inst per sparse tile. sparse matrix stored as CSR, so each instruction corresponds to 8 elements
+        int num_inst_per_sp_tile    = (tile_size * tile_size * (density/100.)) / 8;
+        printf("num inst per sp tile: %u\n", num_inst_per_sp_tile);
+
+        //activations stored in CSR
+        std::vector<std::vector<std::vector<int>>> activations(
+            tiledM, std::vector<std::vector<int>>(
+            tiledK, std::vector<int>(
+            num_inst_per_sp_tile, 0)));
+
+        std::vector<std::vector<std::vector<int>>> weights(
+            tiledK, std::vector<std::vector<int>>(
+            tiledN, std::vector<int>(
+            num_inst_per_dense_tile, 0)));
+
+        //instantiate delta activations
+        for(int i = 0; i < tiledM; i++){
+            for(int j = 0; j < tiledK; j++){
+                for(int k = 0; k < num_inst_per_sp_tile; k++){
+                    activations[i][j][k] = data_num;
+                    data_num++;
+                }
+            }
+        }
+
+        //instantiate weights
+        for(int i = 0; i < tiledK; i++){
+            for(int j = 0; j < tiledN; j++){
+                for(int k = 0; k < num_inst_per_dense_tile; k++){
+                    weights[i][j][k] = data_num;
+                    data_num++;
+                }
+            }
+        }
+
+        indices.resize(nepochs);
+        for(int epoch = 0; epoch < nepochs; epoch++){
+            printf("epoch: %u\n", epoch);
+            indices[epoch].resize(numTiledMult);
+            
+            int tiledM_idx = 0;
+            int tiledK_idx = 0; 
+            int tiledN_idx = 0; 
+
+            for(int tiledMultCount = 0; tiledMultCount < numTiledMult; tiledMultCount++){
+                printf("tiledMultCount: %u\n", tiledMultCount);
+                indices[epoch][tiledMultCount].resize(4);
+                
+                tiledM_idx = (tiledMultCount / tiledK) % tiledM;
+                tiledN_idx = tiledMultCount / (tiledK * tiledM);
+                tiledK_idx = tiledMultCount % tiledK;
+
+                printf("tiledM_idx: %u, tiledN_idx: %u, tiledK_idx: %u\n",
+                tiledM_idx, tiledN_idx, tiledK_idx);
+
+                for(unsigned batch = 0; batch < 4; batch++){
+                    printf("batch: %u\n",batch);
+                    int act_inst_start = 0;
+                    int act_inst_end = 0;
+                    int wgt_inst_start = 0;
+                    int wgt_inst_end = 0;
+                    if(batch == 0){
+                        act_inst_start = 0;
+                        act_inst_end = num_inst_per_sp_tile/2;
+                        wgt_inst_start = 0;
+                        wgt_inst_end = num_inst_per_dense_tile/2;                        
+                    }
+
+                    if(batch == 1){
+                        act_inst_start = 0;
+                        act_inst_end = num_inst_per_sp_tile/2;
+                        wgt_inst_start = num_inst_per_dense_tile/2;
+                        wgt_inst_end = num_inst_per_dense_tile;
+                    }
+
+                    if(batch == 2){
+                        act_inst_start = num_inst_per_sp_tile/2;
+                        act_inst_end = num_inst_per_sp_tile;
+                        wgt_inst_start = 0;
+                        wgt_inst_end = num_inst_per_dense_tile/2;
+                    }
+
+                    if(batch == 3){
+                        act_inst_start = num_inst_per_sp_tile/2;
+                        act_inst_end = num_inst_per_sp_tile;
+                        wgt_inst_start = num_inst_per_dense_tile/2;
+                        wgt_inst_end = num_inst_per_dense_tile;
+                    }
+
+                    //write activation
+                    for(int inst_cnt = act_inst_start; inst_cnt < act_inst_end; inst_cnt++){
+                        indices[epoch][tiledMultCount][batch].push_back(
+                            activations[tiledM_idx][tiledK_idx][inst_cnt]
+                        );
+                        num_inst_cnt += 1;
+                    }
+                    //write weight
+                    for(int inst_cnt = wgt_inst_start; inst_cnt < wgt_inst_end; inst_cnt++){
+                        indices[epoch][tiledMultCount][batch].push_back(
+                            weights[tiledK_idx][tiledN_idx][inst_cnt]
+                        );
+                        num_inst_cnt += 1;
+                    }
+
+                    //printf("\n");
+                    printf("inst added: %lu\n", indices[epoch][tiledMultCount][batch].size());
+                    printf("accumulate total instructions: %u\n", num_inst_cnt);
+
+                }
+
+            }
+        }
+        printf("total %u instructions\n", num_inst_cnt);
+        batch_list.push_back(4);
+        num_inst.push_back(num_inst_cnt);//num inst per epoch
+
+    }
     else{
         assert(false);
     }

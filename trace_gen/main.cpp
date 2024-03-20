@@ -74,6 +74,25 @@ void read_psum(int channel, int num_read, Config *config, int &time)
         }
     }
 
+    if(config->opcode == 3){
+        uint64_t sparsemm_addr = Address(
+                channel,
+                true,
+                PNM_SPARSEMM_BUF_START,
+                config).GetPNMAddress();
+
+        for(int i = 0; i < num_read; i++) {
+        config->cxlpnm_out
+            << "0x"
+            << hex << Address(channel, true , sparsemm_addr, config).GetHexAddress()
+            << " READ "
+            << dec << time << endl;
+
+        time += config->default_interval;
+        sparsemm_addr += config->data_size;
+        }
+    }
+
 
     config->cxlpnm_out
         << "0x"
@@ -119,7 +138,7 @@ int main(int argc, const char* argv[])
     Instruction *inst = new Instruction(config);
     printf("checkpoint3\n");
 
-    //return 0;
+    return 0;
 
     int num_trial = 0;
     int ax_time = 0, b_time = 0;
