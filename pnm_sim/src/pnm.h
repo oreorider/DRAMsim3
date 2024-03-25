@@ -326,7 +326,7 @@ class PNM {
 
     void ReadCache();
 
-    void ReturnDataReady();
+    bool ReturnDataReady();
     void ExecuteAdder();
     void ExecuteDenseMatmul();
     void ExecuteSparseMatmul();

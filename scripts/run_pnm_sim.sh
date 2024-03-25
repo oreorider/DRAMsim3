@@ -23,9 +23,9 @@ mv pnm_*.trace ${res_dir}/cxlpnm
 mv dramsim3* ${res_dir}/cxlpnm
 
 # Run with base trace
-../pnm_sim/build/pnmsim ${config_file} \
-    -t traces/test_base.trc \
-    -c 0 \
-    > ${res_dir}/base/pnm_sim_base.log 2>&1
-mv pnm_*.trace ${res_dir}/base
-mv dramsim3* ${res_dir}/base
+#../pnm_sim/build/pnmsim ${config_file} \
+#    -t traces/test_base.trc \
+#    -c 0 \
+#    > ${res_dir}/base/pnm_sim_base.log 2>&1
+#mv pnm_*.trace ${res_dir}/base
+#mv dramsim3* ${res_dir}/base

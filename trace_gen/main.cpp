@@ -601,6 +601,8 @@ int main(int argc, const char* argv[])
 
         unsigned num_batches = config->batch_list.back();
         unsigned num_inst_per_batch = config->indices[0][0][0].size();
+        printf("num inst per batch: %u, num inst per sp tile: %u, num inst per dense tile: %u\n",
+        num_inst_per_batch, config->num_inst_per_sp_tile, config->num_inst_per_dense_tile);
 
         int output_idx = 0;
         int numTiledMult = 0;
@@ -645,7 +647,7 @@ int main(int argc, const char* argv[])
                                 output_idx = 0;
 
                                 //activations
-                                if(ll < config->num_inst_per_sp_tile){
+                                if(ll < ((unsigned)config->num_inst_per_sp_tile)/2){
                                     is_weight = false;
                                 }
                                 else{

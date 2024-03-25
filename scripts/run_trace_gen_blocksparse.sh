@@ -25,8 +25,8 @@ params="
     --miss_ratio 100
     --base_only false
     --file_name test
-    --act_dim 512-768
-    --weight_dim 768-3072
+    --act_dim 256-512
+    --weight_dim 512-512
     --tile_size 256
     --blk_size 16
     --density 20

@@ -137,27 +137,30 @@ void Config::InitDRAMParams() {
     //dram system : pnm clock ratio
     clk_ratio                   = 20;
 
-    //densemm
-    densemm_buffer_size         = DENSEMM_BUFFER_BYTE_SIZE;
-    densemm_feature_size        = 16; //256
-    densemm_double              = false;
-
+//////////////////////////////////////////////////////////////////////
     //determines if block32, block16, or diffprune
+//////////////////////////////////////////////////////////////////////
     //for BLOCK32
     //sparsemm_blk_size           = 32;
     //num_blocksp_kernels         = 12;
 
     //for BLOCk16
-    sparsemm_blk_size           = 16;
-    num_blocksp_kernels         = 30;
+    //sparsemm_blk_size           = 16;
+    //num_blocksp_kernels         = 30;
 
     //for DIFFPRUNE
     //sparsemm_blk_size         = 1;
     //num_blocksp_kernels       = 3;
 
     //for DENSE
-    //num_blocksp_kernels         = 1;
+    num_blocksp_kernels         = 1;
+///////////////////////////////////////////////////////////////////////
 
+
+    //densemm
+    densemm_buffer_size         = DENSEMM_BUFFER_BYTE_SIZE;
+    densemm_feature_size        = 16; //256
+    densemm_double              = false;
 
     //sparsemm
     sparsemm_buffer_size        = SPARSEMM_BUFFER_BYTE_SIZE;

@@ -343,8 +343,9 @@ bool PNM::Done() {
 
 void PNM::ClockTick() {
     //set to stop when 0xcafe 
-    //if(0){
-    if(clk_ > 300000){
+    bool data_added_to_buf = false;
+    if(0){
+    //if(clk_ > 1000000){
         std::cerr << "FORCE STOP" << std::endl;
         AbruptExit(__FILE__, __LINE__);
     }
@@ -387,11 +388,13 @@ void PNM::ClockTick() {
         return_queue_.begin()->complete_cycle <= clk_){
         //printf("return queue instruction valid\n");
         add_to_buf_cnt++;
-        ReturnDataReady();
+        data_added_to_buf = ReturnDataReady();
     }
 
     // 3-1. Cache check
-    else if (!cache_q_.empty()) {
+    //else if (!cache_q_.empty()) {
+    //if (!cache_q_.empty()) {
+    if(!cache_q_.empty() && data_added_to_buf == false){
         ReadCache();
     }
 
@@ -904,7 +907,7 @@ void PNM::ReadCache() {
     cache_q_.erase(it);
 }
 
-void PNM::ReturnDataReady() {
+bool PNM::ReturnDataReady() {
     //take first instruction in return_queue_ that is valid
     //clk_ > complete_cycle (current cycle is after instruction valid cycle)
     
@@ -914,49 +917,37 @@ void PNM::ReturnDataReady() {
     //2) end of queue
     //3) instruction not valid
     auto inst = return_queue_.begin();
-    auto next_inst = inst++;
+    //auto next_inst = return_queue_.begin();
+    //next_inst++;
+    int num_inst_added = 0;
+    printf("[RETURN DATA READY] return queue size: %lu\n", return_queue_.size());
     while(1){
-        printf("[RETURN DATA READY] inst addr: %lu, next inst addr: %lu\n", inst->hex_addr, next_inst->hex_addr);
+        
         if(dense_.size() >= 2){
             printf("[RETURN DATA READY] dense double buffers all filled, try again later\n");
-            return;
+            break;
         }
         else if(sparse_.size() >= (uint64_t)num_blocksp_kernels){
             printf("[RETURN DATA READY] sparse double buffers all filled, can't receive any more data\n");
             //double buffers all filled up, can't take any more. just leave in the return queue (수신거부)
-            return;
+            break;
         }
     
         //printf("[RETURN DATA READY] - channel: %u, return queue size: %lu, ", 
         //channel_id_, return_queue_.size());
         if (inst == return_queue_.end()) {
-        //    printf("instruction doesn't exist\n");
-            return; // nothing is ready
+            //printf("instruction doesn't exist\n");
+            printf("[RETURN DATA READY] end of return queue\n");
+            break; // nothing is ready
         }
 
         //instruction is not yet valid
         else if(inst->complete_cycle > clk_){
-            inst = next_inst;
-            next_inst = next_inst++;
+            //printf("[RETURN DATA READY] instruction not valid, goto next\n");
+            //inst = next_inst;
+            //next_inst = next_inst++;
+            inst++;
             continue;
-        }
-        else{
-            printf("\n");
-        }
-        //printf("[RETURN DATA READY] clk: %lu, adding addr: 0x%lx to buffer!\n", clk_, inst->hex_addr);
-        //if return queue size is greater than 10, print first 10 just to see
-        //if(return_queue_.size() >= 10){
-        if(0){
-            int cnt = 0;
-            printf("[RETURN DATA READY] - print first 10 in return queue\n");
-            for(auto &element : return_queue_){
-                if(cnt == 10){
-                    break;
-                }
-                printf("\thex_addr: 0x%lx, complete cycle: %lu\n", 
-                element.hex_addr, element.complete_cycle);
-                cnt ++;
-            }
         }
 
         //if opcode == 0 (SLS opcode)
@@ -996,13 +987,62 @@ void PNM::ReturnDataReady() {
             //double buffer filled, dont accept anthing
             if(dense_.size() == 2){
                 printf("[RETURN DATA READY] dense_ buffer filled up, skip for now\n");
-                return;
+                break;
             }
-            if(dense_.size() == 1){
-                printf("[RETURN DATA READY] filling second dense_ buffer while sys array is running\n");
+            
+            //current instruction is activation
+            if(inst->cache_hit == 0){
+                //activation buffer has space
+                if(sys_arr_input_act_idx != 256 * 128){
+                    if(dense_.size() == 1){
+                        printf("[RETURN DATA READY] filling second dense_ buffer while sys array is running\n");
+                    }
+                    printf("[RETURN DATA READY] DENSE inst addr: 0x%lx\n", inst->hex_addr);
+                    printf("[RETURN DATA READY] adding activation to idx: %u, weight idx: %u\n", 
+                    sys_arr_input_act_idx, sys_arr_input_wgt_idx);
+                    sys_arr_input_act_idx += config_.densemm_feature_size;
+
+                    printf("[RETURN DATA READY] removing from return_queue hex_addr: 0x%lx\n", inst->hex_addr);
+                    inst = return_queue_.erase(inst);
+                    printf("[RETURN DATA READY] return queue size: %lu\n", return_queue_.size());
+
+                    num_inst_added++;
+                }
+                //activation buffer no space, move onto next inst
+                else{
+                    //printf("[RETURN DATA READY] activation buffer all filled\n");
+                    inst++;
+                }
             }
+            
+            //current instruction is weight
+            else if(inst->cache_hit == 1){
+                //weight buffer has space
+                if(sys_arr_input_wgt_idx != 256 * 128){
+                    if(dense_.size() == 1){
+                        printf("[RETURN DATA READY] filling second dense_ buffer while sys array is running\n");
+                    }
+                    printf("[RETURN DATA READY] DENSE inst addr: 0x%lx\n", inst->hex_addr);
+                    printf("[RETURN DATA READY] adding weight to idx: %u, activation idx: %u\n", 
+                    sys_arr_input_wgt_idx, sys_arr_input_act_idx);
+                    sys_arr_input_wgt_idx += config_.densemm_feature_size;
+
+                    printf("[RETURN DATA READY] removing from return_queue hex_addr: 0x%lx\n", inst->hex_addr);
+                    inst = return_queue_.erase(inst);
+                    printf("[RETURN DATA READY] return queue size: %lu\n", return_queue_.size());
+
+                    num_inst_added++;
+                }
+                else{
+                    //printf("[RETURN DATA READY] weight buffer all filled\n");
+                    inst++;
+                }
+            }
+            
             //if either buffer not filled, fill them
+            /*
             if(sys_arr_input_act_idx != 256*128 || sys_arr_input_wgt_idx != 256*128){
+                num_inst_added++;
                 //if act
                 if(inst->cache_hit == 0 && sys_arr_input_act_idx != 256*128){
                     printf("[RETURN DATA READY] activation added to idx: %u\n", sys_arr_input_act_idx);
@@ -1021,9 +1061,10 @@ void PNM::ReturnDataReady() {
                     sys_arr_input_wgt_idx += config_.densemm_feature_size;
                 }
             }
-
+            */
             //check if buffers are filled after filling them
             //if sys arr input buffers are full, make dense object
+
             if(sys_arr_input_act_idx == 256*128 && sys_arr_input_wgt_idx == 256*128){
                 printf("[RETURN DATA READY] both buffers filled, making denseMatmulElement and adding to dense_\n");
                 printf("[RETURN DATA READY] hardware clk: %lu\n", hardware_clk_);
@@ -1045,7 +1086,7 @@ void PNM::ReturnDataReady() {
             printf("[RETURN DATA READY] BLOCKSPARSE\n");
             if(sparse_.size() == (uint64_t)num_blocksp_kernels){
                 printf("[RETURN DATA READY] all %u sparse_ filled, skip\n", num_blocksp_kernels);
-                return;
+                break;
             }
             
             //fill buffer 
@@ -1056,6 +1097,10 @@ void PNM::ReturnDataReady() {
                         block_sp_input_act_buf[block_sp_input_act_idx + i] = inst->data[i];
                     }
                     block_sp_input_act_idx += config_.sparsemm_feature_size;
+
+                    printf("[RETURN DATA READY] removing from return_queue hex_addr: 0x%lx\n", inst->hex_addr);
+                    inst = return_queue_.erase(inst);
+                    printf("[RETURN DATA READY] return queue size: %lu\n", return_queue_.size());
                 }
 
                 else if(inst->cache_hit == 1 && block_sp_input_wgt_idx != num_block_sp_input){//if weight
@@ -1064,6 +1109,11 @@ void PNM::ReturnDataReady() {
                         block_sp_input_wgt_buf[block_sp_input_wgt_idx + i] = inst->data[i];
                     }
                     block_sp_input_wgt_idx += config_.sparsemm_feature_size;
+
+                    
+                    printf("[RETURN DATA READY] removing from return_queue hex_addr: 0x%lx\n", inst->hex_addr);
+                    inst = return_queue_.erase(inst);
+                    printf("[RETURN DATA READY] return queue size: %lu\n", return_queue_.size());
                 }
             }
 
@@ -1097,11 +1147,19 @@ void PNM::ReturnDataReady() {
                     printf("[RETURN DATA READY] activation, idx: %u\n", spgemm_input_act_idx);
                     //add to act buffer, do later
                     spgemm_input_act_idx += 1;
+                    
+                    printf("[RETURN DATA READY] removing from return_queue hex_addr: 0x%lx\n", inst->hex_addr);
+                    inst = return_queue_.erase(inst);
+                    printf("[RETURN DATA READY] return queue size: %lu\n", return_queue_.size());
                 }
                 else{//if weight
                     printf("[RETURN DATA READY] weight, idx: %u\n", spgemm_input_wgt_idx);
                     //add to wgt buffer, do later
                     spgemm_input_wgt_idx += 1;
+                    
+                    printf("[RETURN DATA READY] removing from return_queue hex_addr: 0x%lx\n", inst->hex_addr);
+                    inst = return_queue_.erase(inst);
+                    printf("[RETURN DATA READY] return queue size: %lu\n", return_queue_.size());
                 }
             }
             
@@ -1132,15 +1190,16 @@ void PNM::ReturnDataReady() {
             std::cerr << "unknown opcode" << (int)inst->opcode << std::endl;
             AbruptExit(__FILE__, __LINE__);
         }
-
-        //remove from return_queue_
-        printf("[RETURN DATA READY] removing from return_queue hex_addr: 0x%lx\n", inst->hex_addr);
-        return_queue_.erase(inst);
-        printf("[RETURN DATA READY] return queue size: %lu\n", return_queue_.size());
-        inst = next_inst;
-        next_inst = next_inst++;
     }
 
+    printf("[RETURN DATA READY] num inst added: %u\n", num_inst_added);
+    if(num_inst_added == 0){
+        return false;
+    }
+    else{
+        return true;
+    }
+    
 }
 
 void PNM::ExecuteAdder(){

@@ -341,15 +341,15 @@ Config::Config(int argc, const char* argv[])
                             weights[tiledK_idx][tiledN_idx][inst_cnt]  
                         );
 
-                        printf("{%u [%u], %u [%u]}\t\t", 
-                        activations[tiledM_idx][tiledK_idx][(batch * 2048) + (inst_cnt % 2048)],
-                        (batch * 2048) + (inst_cnt % 2048),
-                        weights[tiledK_idx][tiledN_idx][inst_cnt],
-                        inst_cnt);
-                        
-                        if(inst_cnt%4 == 0){
-                            printf("\n");
-                        }
+                        // printf("{%u [%u], %u [%u]}\t\t", 
+                        // activations[tiledM_idx][tiledK_idx][(batch * 2048) + (inst_cnt % 2048)],
+                        // (batch * 2048) + (inst_cnt % 2048),
+                        // weights[tiledK_idx][tiledN_idx][inst_cnt],
+                        // inst_cnt);
+                        // 
+                        // if(inst_cnt%4 == 0){
+                            // printf("\n");
+                        // }
 
                         num_inst_cnt +=2;
                     }
