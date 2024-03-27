@@ -133,9 +133,12 @@ void Config::InitDRAMParams() {
     instruction_double          = reader.GetBoolean("PNM", "instruction_double",
                                                            false);
     psum_double                 = reader.GetBoolean("PNM", "psum_double", false);
+
     
+//////////////////////////////////////////////////////////////////////
     //dram system : pnm clock ratio
     clk_ratio                   = 20;
+//////////////////////////////////////////////////////////////////////
 
 //////////////////////////////////////////////////////////////////////
     //determines if block32, block16, or diffprune

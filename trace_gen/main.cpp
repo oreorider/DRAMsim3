@@ -630,6 +630,7 @@ int main(int argc, const char* argv[])
                     );
                     for(int tiledMultCount = 0; tiledMultCount < numTiledMult; tiledMultCount++){
                         for(unsigned b_id = 0; b_id < num_batches; b_id++){
+                            int num_weights = 0;
                             for(unsigned ll = 0; ll < num_inst_per_batch; ll++){
                                 addr -> reset(
                                     ch,
@@ -646,12 +647,14 @@ int main(int argc, const char* argv[])
 
                                 output_idx = 0;
 
-                                //activations
-                                if(ll < ((unsigned)config->num_inst_per_sp_tile)/2){
+                                //activation -- if less than 1638th number and is odd index
+                                if(ll < 1638 && ll%2==1){
                                     is_weight = false;
+                                    
                                 }
                                 else{
                                     is_weight = true;
+                                    num_weights++;
                                 }
 
                                 inst->write_instruction(
@@ -664,6 +667,7 @@ int main(int argc, const char* argv[])
                                 );
 
                             }
+                            printf("num weights: %u\n", num_weights);
                         }
                     }
                 }

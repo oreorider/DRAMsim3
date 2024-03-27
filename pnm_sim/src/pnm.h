@@ -225,6 +225,7 @@ class PNM {
 
     std::multimap<uint64_t, Instruction> requested_rd_q_;
     std::vector<Instruction> return_queue_;
+    std::vector<Instruction> act_return_queue_;
 
     std::vector<AdderElement> adder_;
     std::vector<DenseMatmulElement> dense_;
@@ -267,6 +268,7 @@ class PNM {
     float* spgemm_input_wgt_buf;
     int spgemm_input_act_idx;
     int spgemm_input_wgt_idx;
+
     //number of inputs to block sparse arrays that feed into systollic array
     int num_block_sp_input;
     //status of blocksparse systolic arrays (kernels)
@@ -284,6 +286,7 @@ class PNM {
     //number instructions required to be in buffer for sparse_ element to be made
     int req_num_inst_act_buf;
     int req_num_inst_wgt_buf;
+    int req_num_delta_act;
     int kern_num_sp_elements;
 
     //sparsemm buffer

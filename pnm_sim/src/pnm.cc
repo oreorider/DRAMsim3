@@ -291,21 +291,16 @@ PNM::PNM(int channel, const Config &config, const Timing &timing,
 
     activation_sparse = config_.activation_sparse;
 
-    //if activations are sparse, weight is dense
-    if(activation_sparse){
-        printf("activation_sparse TRUE\n");
-        //number instructions required to make one sparse_ element
-        req_num_inst_act_buf = 1638/2;
-        req_num_inst_wgt_buf = 4096;
-        kern_num_sp_elements = 1638;
-    }
-    //if actiations dense weight sparse
+    
+    //for diffprune
     //up to 8/256 = 3.125% density is the same complexity
-    else{
-        req_num_inst_act_buf = 4096;
-        req_num_inst_wgt_buf = 82;
-        kern_num_sp_elements = 82;
-    }
+    req_num_inst_act_buf = 4096;
+    req_num_inst_wgt_buf = 82;
+    
+    kern_num_sp_elements = 82;
+    
+    //required number of delta activation numbers to multiply with 256x128 weight
+    req_num_delta_act = int(256*128*0.2/8) * 8; //6552numbers, requires 819 instructions. 8 CSR numbers per instruction
 
     spgemm_input_act_buf = new float[req_num_inst_act_buf];
     spgemm_input_wgt_buf = new float[req_num_inst_wgt_buf];
@@ -384,8 +379,7 @@ void PNM::ClockTick() {
 
     // 2. Data in return_queue_ -> SLS op
     //if (!return_queue_.empty()) {
-    if(!return_queue_.empty() &&
-        return_queue_.begin()->complete_cycle <= clk_){
+    if(!return_queue_.empty() || !act_return_queue_.empty()){
         //printf("return queue instruction valid\n");
         add_to_buf_cnt++;
         data_added_to_buf = ReturnDataReady();
@@ -401,9 +395,15 @@ void PNM::ClockTick() {
     // 4. Instruction fetch -> Send to controller
     //if(return_queue_.size() < 4096 && program_count != -1){
     if(program_count != -1){
-    //if(return_queue_.size() < 500){
+    //if(return_queue_.size() < 4096){
         //printf("schedule instruction\n");
         ScheduleInstruction();
+    }
+    if(return_queue_.size() == 128){
+        for(auto inst : return_queue_){
+            printf("hex addr: 0x%lx, complete cycle: %lu\n",
+            inst.hex_addr, inst.complete_cycle);
+        }
     }
 
     clk_++;
@@ -718,6 +718,7 @@ void PNM::ScheduleInstruction() {
                 //can't do anything, just return
                 //wait for next clock tick to do anything
                 //printf("controller busy :(\n");
+                printf("[SCHEDULE INST] memory controller busy\n");
                 return;
             }
         }
@@ -756,8 +757,15 @@ void PNM::ScheduleInstruction() {
         //if (cache_q_.size() < 8) {
         if(1){
             if(isActivation){
-                printf("[SCHEDULE INST - CACHE HIT] activation auto cache hit \n");
+                if(act_return_queue_.size() > 8192){
+                    //printf("[SCHEDULE INST] too many activation instructions queued, waiting for weight instruction\n");
+                    return;
+                }
+                else{
+                    printf("[SCHEDULE INST - CACHE HIT] activation auto cache hit \n");
+                }
             }
+
             else{
                 printf("[SCHEDULE INST - CACHE HIT] weight cache hit\n");
             }    
@@ -769,11 +777,18 @@ void PNM::ScheduleInstruction() {
             //set complete cycle to inf, add to return queue
             //printf("[SCHEDULE INST] hex addr: 0x%lx added to return queue\n", it->second.hex_addr);
             //printf("instruction added to return queue with infinite complete cycle\n");
-            it->second.complete_cycle = INT_MAX;
             it->second.data = new float[config_.densemm_feature_size];
-            return_queue_.push_back(it->second);
-            cache_q_.push_back(it->second);
-
+            it->second.complete_cycle = INT_MAX;
+            //if weight, add to normal return queue
+            if(!isActivation){
+                return_queue_.push_back(it->second);
+                cache_q_.push_back(it->second);
+            }
+            //if activation, add to acivation return queue
+            else{
+                act_return_queue_.push_back(it->second);
+                cache_q_.push_back(it->second);
+            }
             //printf("[SCHEULDE INST] data: [");
             //for(int i = 0; i < config_.densemm_feature_size; i++){
             //    printf("%f", it->second.data[i]);
@@ -819,7 +834,7 @@ void PNM::ScheduleInstruction() {
                   << std::endl;
 
         printf("[TRACE END] - channel: %u\n", channel_id_);
-        printf("\tprogram count: %u\n", program_count);
+        printf("\tprogram count (num_read_inst): %u\n", program_count);
         num_read_inst = program_count;
         program_count = -1;
         num_write_inst = 0;
@@ -834,77 +849,68 @@ Transaction PNM::InstructionToTransaction(const Instruction inst) {
 }
 
 void PNM::ReadCache() {
-    auto it = cache_q_.begin();
-    auto it_c = data_cache_.find(it->hex_addr);
-    bool isActivation = (it->cache_hit == 0);
 
-    if (it_c == data_cache_.end()){//if instruction not in data cache
-        if(isActivation == false){//if instruction is not activation (weight)
-            printf("[READ CACHE] cache q not empty, but weight, so no auto cache hit\n");
-            return;//return back if instruction is not in data cache and instruction is a weight
-            //weights must always be in the data cache for cache hit to occur.
+    //while(!cache_q_.empty()){
+        auto it = cache_q_.begin();
+        auto it_c = data_cache_.find(it->hex_addr);
+        bool isActivation = (it->cache_hit == 0);
+
+        if (it_c == data_cache_.end()){//if instruction not in data cache
+            if(isActivation == false){//if instruction is not activation (weight)
+                printf("[READ CACHE] cache q not empty, but weight, so no auto cache hit\n");
+                return;//return back if instruction is not in data cache and instruction is a weight
+                //weights must always be in the data cache for cache hit to occur.
+            }
+            else{
+                printf("[READ CACHE] activation auto cache hit ");
+                printf("hex addr: %lx\n", it->hex_addr);
+            }
         }
-        else{
-            printf("[READ CACHE] activation auto cache hit ");
-            printf("hex addr: %lx\n", it->hex_addr);
-        }
-    }
 
-#ifdef CMD_TRACE
-    std::cout << "in cache [" << channel_id_ << "] "
-              << std::left << std::setw(18)
-              << clk_ << " cache hit \t\t"
-              << std::hex << it->addr.channel << "   "
-              << it->addr.rank << "   "
-              << it->addr.bankgroup << "   "
-              << it->addr.bank << "   0x"
-              << it->addr.row << "   0x"
-              << it->addr.column << std::dec
-              << std::endl;
-#endif  // CMD_TRACE
-    //one cycle to read
-    //printf("[READ CACHE] update instruction complete cycle and instruction data\n");
-    printf("[READ CACHE] hex_addr: 0x%lx\n", it->hex_addr);
-    it->complete_cycle = clk_ + 1;//should update complete cycle in return queue aswell
+    #ifdef CMD_TRACE
+        std::cout << "in cache [" << channel_id_ << "] "
+                << std::left << std::setw(18)
+                << clk_ << " cache hit \t\t"
+                << std::hex << it->addr.channel << "   "
+                << it->addr.rank << "   "
+                << it->addr.bankgroup << "   "
+                << it->addr.bank << "   0x"
+                << it->addr.row << "   0x"
+                << it->addr.column << std::dec
+                << std::endl;
+    #endif  // CMD_TRACE
+        //one cycle to read
+        //printf("[READ CACHE] update instruction complete cycle and instruction data\n");
+        printf("[READ CACHE] hex_addr: 0x%lx\n", it->hex_addr);
+        it->complete_cycle = clk_ + 1;//should update complete cycle in return queue aswell
 
-    //update instruction in the cache with corresponding weight data
-    //it->data = new float[config_.sparse_feature_size];
-    //for (int i = 0; i < config_.sparse_feature_size; i++) {
-    //    it->data[i] = it_c->second[i];
-    //}
+        //update instructions in return_queue to have complete cycle = clk_ + 1
+        //if activation, iterate through activation return queue
+        if(isActivation){
+            for(auto& element : act_return_queue_){
+                if(element.hex_addr == it->hex_addr){
+                    element.complete_cycle = clk_ + 1;
 
-    //update instruction in return queue with corresponding weight data
-
-
-    //update instructions in return_queue to have complete cycle = clk_ + 1
-    
-    for(auto& element : return_queue_){
-        if(element.hex_addr == it->hex_addr){
-            element.complete_cycle = clk_ + 1;
-
-            //just set all activations as 1
-            if(isActivation){
-                for(int i = 0; i < config_.densemm_feature_size; i++){
-                    element.data[i] = 1.0;
+                    //just set all activations as 1
+                    for(int i = 0; i < config_.densemm_feature_size; i++){
+                        element.data[i] = 1.0;
+                    }
                 }
             }
+        }
 
-            //get weight data from cache
-            else{
-                element.data = it_c->second;
+        //if weight, iterate through weight return queue
+        else{
+            for(auto& element : return_queue_){
+                if(element.hex_addr == it->hex_addr){
+                    element.complete_cycle = clk_ + 1;
+                    element.data = it_c->second;
+                }
             }
         }
-    }
-
-    //checking if return queue properly updated
-    //printf("[READ CACHE] print return queue\n");
-    //for(unsigned i = 0; i < return_queue_.size(); i++){
-    //    printf("\ti: %u, hex_addr: 0x%lx, complete_cycle: %lu, data[0]: %f\n",
-    //    i, return_queue_[i].hex_addr, return_queue_[i].complete_cycle, return_queue_[i].data[0]);
+        cache_q_.erase(it);
+        printf("[READ CACHE] cache_q_ size after erase: %lu\n", cache_q_.size());
     //}
-    //printf("[READ CACHE] return queue size: %lu\n", return_queue_.size());
-    //remove instruction from cache_queue (finished processing inst)
-    cache_q_.erase(it);
 }
 
 bool PNM::ReturnDataReady() {
@@ -920,34 +926,49 @@ bool PNM::ReturnDataReady() {
     //auto next_inst = return_queue_.begin();
     //next_inst++;
     int num_inst_added = 0;
-    printf("[RETURN DATA READY] return queue size: %lu\n", return_queue_.size());
+    printf("[RETURN DATA READY] weight return queue size: %lu activation return queue size: %lu\n", 
+    return_queue_.size(), act_return_queue_.size());
     while(1){
         
+        //if dense double filler filled
         if(dense_.size() >= 2){
             printf("[RETURN DATA READY] dense double buffers all filled, try again later\n");
             break;
         }
+        //if blockSp double buffer filled
         else if(sparse_.size() >= (uint64_t)num_blocksp_kernels){
             printf("[RETURN DATA READY] sparse double buffers all filled, can't receive any more data\n");
             //double buffers all filled up, can't take any more. just leave in the return queue (수신거부)
             break;
         }
     
-        //printf("[RETURN DATA READY] - channel: %u, return queue size: %lu, ", 
-        //channel_id_, return_queue_.size());
+        //end of return queue (finished searching weights, now search activations)
         if (inst == return_queue_.end()) {
             //printf("instruction doesn't exist\n");
-            printf("[RETURN DATA READY] end of return queue\n");
-            break; // nothing is ready
+            //printf("[RETURN DATA READY] end of return queue\n");
+            inst = act_return_queue_.begin();
+            continue;
+        }
+
+        //finished searching weights and activations
+        if(inst == act_return_queue_.end()){
+            break;
         }
 
         //instruction is not yet valid
-        else if(inst->complete_cycle > clk_){
+        if(inst->complete_cycle > clk_){
             //printf("[RETURN DATA READY] instruction not valid, goto next\n");
             //inst = next_inst;
             //next_inst = next_inst++;
             inst++;
             continue;
+        }
+
+        //instruction valid
+        else{
+            //printf("[RETURN DATA READY] valid instruction, addr: 0x%lx, complete cycle: %lu\n",
+            //inst->hex_addr, inst->complete_cycle);
+            ;
         }
 
         //if opcode == 0 (SLS opcode)
@@ -980,9 +1001,8 @@ bool PNM::ReturnDataReady() {
             //add to adder_ vector
             adder_.push_back(adder);
         }
-        //add support for dense mm
-        //else if(inst->opcode == Opcode::DUMMY){
 
+        //if DENSE
         else if(inst->opcode == Opcode::DENSE){
             //double buffer filled, dont accept anthing
             if(dense_.size() == 2){
@@ -1003,8 +1023,8 @@ bool PNM::ReturnDataReady() {
                     sys_arr_input_act_idx += config_.densemm_feature_size;
 
                     printf("[RETURN DATA READY] removing from return_queue hex_addr: 0x%lx\n", inst->hex_addr);
-                    inst = return_queue_.erase(inst);
-                    printf("[RETURN DATA READY] return queue size: %lu\n", return_queue_.size());
+                    inst = act_return_queue_.erase(inst);
+                    printf("[RETURN DATA READY] activation return queue size: %lu\n", act_return_queue_.size());
 
                     num_inst_added++;
                 }
@@ -1090,6 +1110,7 @@ bool PNM::ReturnDataReady() {
             }
             
             //fill buffer 
+            /*
             if(block_sp_input_act_idx != num_block_sp_input || block_sp_input_wgt_idx != num_block_sp_input){
                 if(inst->cache_hit == 0 && block_sp_input_act_idx != num_block_sp_input){//if act
                     printf("[RETURN DATA READY] add to buffer - activation, idx: %u\n", block_sp_input_act_idx);
@@ -1116,7 +1137,39 @@ bool PNM::ReturnDataReady() {
                     printf("[RETURN DATA READY] return queue size: %lu\n", return_queue_.size());
                 }
             }
+            */
 
+            if(inst->cache_hit == 0){
+                if(block_sp_input_act_idx != num_block_sp_input){
+                    printf("[RETURN DATA READY] add to buffer - activation, idx: %u\n", block_sp_input_act_idx);
+                    block_sp_input_act_idx += config_.sparsemm_feature_size;
+
+                    printf("[RETURN DATA READY] removing from return_queue hex_addr: 0x%lx\n", inst->hex_addr);
+                    inst = act_return_queue_.erase(inst);
+                    printf("[RETURN DATA READY] activation return queue size: %lu\n", act_return_queue_.size());
+
+                    num_inst_added++;
+                }
+                else{
+                    inst++;
+                }
+            }
+
+            else if(inst->cache_hit == 1){
+                if(block_sp_input_wgt_idx != num_block_sp_input){
+                    printf("[RETURN DATA READY] add to buffer - weight, idx: %u\n", block_sp_input_wgt_idx);
+                    block_sp_input_wgt_idx += config_.sparsemm_feature_size;
+
+                    printf("[RETURN DATA READY] removing from return_queue hex_addr: 0x%lx\n", inst->hex_addr);
+                    inst = return_queue_.erase(inst);
+                    printf("[RETURN DATA READY] return queue size: %lu\n", return_queue_.size());
+
+                    num_inst_added++;
+                }
+                else{
+                    inst++;
+                }
+            }
             //check if buffers filled after 
             if(block_sp_input_act_idx == num_block_sp_input && block_sp_input_wgt_idx == num_block_sp_input){
                 printf("[RETURN DATA READY] both buffers filled, making sparseElement, clk: %lu, hardware clk: %lu\n",
@@ -1141,7 +1194,8 @@ bool PNM::ReturnDataReady() {
                 printf("[RETURN DATA READY] all %u sparse_ filled, skip\n", num_blocksp_kernels);
             }
 
-            //if either buffer is empty, fill them!
+            //TODO: re write logic that adds to buffer for DIFFPRUNE
+            /*
             if(spgemm_input_act_idx != req_num_inst_act_buf || spgemm_input_wgt_idx != req_num_inst_wgt_buf){
                 if(inst->cache_hit == 0){//if activation
                     printf("[RETURN DATA READY] activation, idx: %u\n", spgemm_input_act_idx);
@@ -1162,7 +1216,9 @@ bool PNM::ReturnDataReady() {
                     printf("[RETURN DATA READY] return queue size: %lu\n", return_queue_.size());
                 }
             }
-            
+            */
+
+        
             //if buffers fulled
             //printf("[RETURN DATA READY] activation, idx: %u\n", spgemm_input_act_idx);
             if(spgemm_input_act_idx == req_num_inst_act_buf && spgemm_input_wgt_idx == req_num_inst_wgt_buf){
@@ -1182,13 +1238,83 @@ bool PNM::ReturnDataReady() {
 
         }
 
+        //delta activation
         else if(inst->opcode == Opcode::ACTIVATION){
+            //if data is activation
+            if(dense_.size() == 2){
+                printf("[RETURN DATA READY] dense_ buffer filled up\n");
+                break;
+            }
+
+            //sparse activations, thats why 1638 (20% dense 256x256 tile has 1638 elements)
+            if(inst->cache_hit == 0){
+                if(sys_arr_input_act_idx != req_num_delta_act){
+                    if(dense_.size() == 1){
+                        printf("[RETURN DATA READY] filling second dense_ buffer while sys array is running\n");
+                    }
+                    printf("[RETURN DATA READY] DELTA_ACT inst addr: 0x%lx\n", inst->hex_addr);
+                    printf("[RETURN DATA READY] adding activation to idx: %u, weight idx: %u\n", 
+                    sys_arr_input_act_idx, sys_arr_input_wgt_idx);
+
+                    //increase by half of feature size since CSR format
+                    sys_arr_input_act_idx += config_.densemm_feature_size/2;
+
+                    printf("[RETURN DATA READY] removing from return_queue hex_addr: 0x%lx\n", inst->hex_addr);
+                    inst = act_return_queue_.erase(inst);
+                    printf("[RETURN DATA READY] activation return queue size: %lu\n", act_return_queue_.size());
+
+                    num_inst_added++;
+                }
+                else{
+                    inst++;
+                }
+            }
+
+            //delta act has dense weights
+            else if(inst->cache_hit == 1){
+                if(sys_arr_input_wgt_idx != 256 * 128){
+                    if(dense_.size() == 1){
+                        printf("[RETURN DATA READY] filling second dense_ buffer while sys array is running\n");
+                    }
+                    printf("[RETURN DATA READY] DENSE inst addr: 0x%lx\n", inst->hex_addr);
+                    printf("[RETURN DATA READY] adding weight to idx: %u, activation idx: %u\n", 
+                    sys_arr_input_wgt_idx, sys_arr_input_act_idx);
+                    sys_arr_input_wgt_idx += config_.densemm_feature_size;
+
+                    printf("[RETURN DATA READY] removing from return_queue hex_addr: 0x%lx\n", inst->hex_addr);
+                    inst = return_queue_.erase(inst);
+                    printf("[RETURN DATA READY] return queue size: %lu\n", return_queue_.size());
+
+                    num_inst_added++;
+                }
+                else{
+                    inst++;
+                }
+            }
+        
+            if(sys_arr_input_act_idx == req_num_delta_act && sys_arr_input_wgt_idx == 256*128){
+                printf("[RETURN DATA READY] both buffers filled, making denseMatmulElement and adding to dense_\n");
+                printf("[RETURN DATA READY] hardware clk: %lu\n", hardware_clk_);
+                DenseMatmulElement element = DenseMatmulElement(
+                    inst->densemm_idx,
+                    sys_arr_input_act_buf,
+                    sys_arr_input_wgt_buf
+                );
+                dense_.push_back(element);
+
+                sys_arr_input_act_idx = 0;
+                sys_arr_input_wgt_idx = 0;
+            }
 
         }
 
         else {
             std::cerr << "unknown opcode" << (int)inst->opcode << std::endl;
             AbruptExit(__FILE__, __LINE__);
+        }
+
+        if(num_inst_added == 1){
+            break;
         }
     }
 
@@ -1409,23 +1535,6 @@ void PNM::ExecuteDenseMatmul(){
     printf("[EXECUTE DENSEMATMUL] densemm_idx: %u\n", dense_it->densemm_idx);
     //int sidelength = config_.mm_sidelength;
 
-    //print matrixes before matmul
-    //printf("[EXECUTE DENSEMATMUL] densemm_activations (A) - first 16: \n\t");
-    //for(int i = 0; i < 16; i++){
-    //    if(i % sidelength == 0 && i!=0){
-    //        printf("\n\t");
-    //    }
-    //    printf("%f ", dense_it->densemm_act[i]);
-    //}
-    //printf("\n");
-
-    //printf("[EXECUTE DENSEMATMUL] densemm_weights (B) - first 16: \n\t");
-    //for(int i = 0; i < 16; i++){
-    //    if(i % sidelength == 0 && i!=0){
-    //        printf("\n\t");
-    //    }
-    //    printf("%f ", dense_it->densemm_wgt[i]);
-    //}
     //printf("\n");
 
     //float* A_copy = new float[config_.densemm_feature_size];
@@ -1481,31 +1590,23 @@ void PNM::ExecuteDenseMatmul(){
         }
     }
 
-    //printf("[EXECUTE DENSEMATMUL] resultant (C), after matmul: \n\t");
-    //for(int i = 0; i < 128*128; i++){
-    //    if(i % 128 == 0 && i!=0){
-    //        printf("\n\t");
-    //    }
-    //    printf("%f ", C_tmp[i]);
-    //}
-    //printf("\n");
-    //printf("[EXECUTE DENSEMATMUL] resultant (C) first 16\n\t");
-    //for(int i = 0; i < 16; i++){
-    //    if(i % sidelength == 0 && i!=0){
-    //        printf("\n\t");
-    //    }
-    //    printf("%f ", C_tmp[i]);
-    //}
-    //printf("\n");
-    
-
-    //delete [] dense_it->densemm_act;
-    //delete [] dense_it->densemm_wgt;
     delete [] C_tmp;
     
     //dense_.erase(dense_it);
     //num_densemm+=2;
-    num_densemm +=4096;
+    //if(opcode == Opcode::DENSE){
+    //    num_densemm +=4096;
+    //}
+    //if(opcode == Opcode::ACTIVATION){
+    //    num_densemm += (2048 + 820);
+    //}
+
+    //for delta act
+    //num_densemm += (2048 + 819);
+
+    //for DENSE
+    num_densemm += 4096;
+
     printf("[EXECUTE DENSEMATMUL] num_densemm/num_read_inst: %u/%u\n",
     num_densemm, num_read_inst);
 
@@ -1555,7 +1656,7 @@ std::pair<uint64_t, int> PNM::ReturnDoneTrans(uint64_t clock) {
     //make deterministic data that was retreived from memory
     float* returned_data;
 
-    if(rq_it->opcode == Opcode::DENSE){
+    if(rq_it->opcode == Opcode::DENSE || rq_it->opcode == Opcode::ACTIVATION){
         returned_data = new float[config_.densemm_feature_size];
         for(int i =0; i < config_.densemm_feature_size; i++){
             returned_data[i] = (rand()%10000)/20000.0;
@@ -1618,7 +1719,7 @@ std::pair<uint64_t, int> PNM::ReturnDoneTrans(uint64_t clock) {
             num_reads -= 1;
         }
         
-        else if(it->second.opcode == Opcode::DENSE){
+        else if(it->second.opcode == Opcode::DENSE || it->second.opcode == Opcode::ACTIVATION){
             //printf("instruction complete cycle : %lu\n", clock);
             it->second.complete_cycle = clock;
             rq_it->complete_cycle = clock;

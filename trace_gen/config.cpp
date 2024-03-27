@@ -1245,23 +1245,35 @@ Config::Config(int argc, const char* argv[])
                         wgt_inst_end = num_inst_per_dense_tile;
                     }
 
-                    //write activation
-                    for(int inst_cnt = act_inst_start; inst_cnt < act_inst_end; inst_cnt++){
-                        indices[epoch][tiledMultCount][batch].push_back(
-                            activations[tiledM_idx][tiledK_idx][inst_cnt]
+                    int act_cnt = act_inst_start;
+                    int wgt_cnt = wgt_inst_start;
+                    int num_weight = 0;
+                    int num_act = 0;
+                    for(int cnt = 0; cnt < num_inst_per_dense_tile/2; cnt++){
+                        //add weight
+                        if(wgt_cnt < wgt_inst_end){
+                            indices[epoch][tiledMultCount][batch].push_back(
+                            weights[tiledK_idx][tiledN_idx][wgt_cnt]
                         );
                         num_inst_cnt += 1;
-                    }
-                    //write weight
-                    for(int inst_cnt = wgt_inst_start; inst_cnt < wgt_inst_end; inst_cnt++){
-                        indices[epoch][tiledMultCount][batch].push_back(
-                            weights[tiledK_idx][tiledN_idx][inst_cnt]
+                        num_weight++;
+                        
+                        //add act
+                        }
+                        if(act_cnt < act_inst_end){
+                            indices[epoch][tiledMultCount][batch].push_back(
+                            activations[tiledM_idx][tiledK_idx][act_cnt]
                         );
                         num_inst_cnt += 1;
+                        num_act++;
+                        }
+
+                        act_cnt++;
+                        wgt_cnt++;
                     }
 
-                    //printf("\n");
-                    printf("inst added: %lu\n", indices[epoch][tiledMultCount][batch].size());
+                    printf("inst added: %lu, num weight: %u, num act: %u\n", 
+                    indices[epoch][tiledMultCount][batch].size(), num_weight, num_act);
                     printf("accumulate total instructions: %u\n", num_inst_cnt);
 
                 }
