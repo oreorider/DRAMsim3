@@ -147,22 +147,22 @@ void Config::InitDRAMParams() {
 
     //for BLOCK32
     //sparsemm_blk_size           = 32;
-    //num_blocksp_kernels         = 12;
+    //num_blocksp_kernels         = 8;
 
     //for BLOCk16
-    //sparsemm_blk_size           = 16;
-    //num_blocksp_kernels         = 30;
+    sparsemm_blk_size           = 16;
+    num_blocksp_kernels         = 16;
 
     //for DIFFPRUNE
-    sparsemm_blk_size           = 1;
-    num_blocksp_kernels         = 1;
-    delta_wgt_parallel_row      = 32;
+    //sparsemm_blk_size           = 1;
+    //num_blocksp_kernels         = 1;
+    //delta_wgt_parallel_row      = 32;
 
     //for DENSE
     //num_blocksp_kernels         = 1;
 
     //for DELTA_ACT
-    delta_act_parallel_row      = 16; //compute 32 rows in parallel
+    //delta_act_parallel_row      = 16; //compute 32 rows in parallel
 
 ///////////////////////////////////////////////////////////////////////
 

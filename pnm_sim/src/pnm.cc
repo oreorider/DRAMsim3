@@ -1119,7 +1119,7 @@ bool PNM::ReturnDataReady() {
         
         //if block32, block16
         else if(inst->opcode == Opcode::SPARSE && config_.sparsemm_blk_size != 1){
-            printf("[RETURN DATA READY] BLOCKSPARSE\n");
+            //printf("[RETURN DATA READY] BLOCKSPARSE\n");
             if(sparse_.size() == (uint64_t)num_blocksp_kernels){
                 printf("[RETURN DATA READY] all %u sparse_ filled, skip\n", num_blocksp_kernels);
                 break;
