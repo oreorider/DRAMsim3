@@ -100,14 +100,25 @@ PNM::PNM(int channel, const Config &config, const Timing &timing,
     : channel_id_(channel),
       clk_(0), hardware_clk_(0),
       config_(config),
-      sls_exec(false), program_count(-1), 
-      num_write_inst(0), num_read_inst(-1), 
-      num_accum(-1), add_to_buf_cnt(-1),
-      start_clk(-1), hardware_busy_clk_cnt(-1), end_clk(-1),
-      sys_array_start_clk(-1), sys_array_end_clk(-1),
+      sls_exec(false), 
+      program_count(-1), num_write_inst(0), num_read_inst(-1), num_accum(-1), 
+      add_to_buf_cnt(-1),
+
+      sys_array_start_clk(-1), 
+      sys_array_end_clk(-1),
+
+      delta_act_kern_start_clk(-1), 
+      delta_act_kern_end_clk(-1),
+
+      start_clk(-1), 
+      end_clk(-1),
+      hardware_busy_clk_cnt(-1), 
       cycles_stalled(0),
+
       sys_array_busy(0),
+      delta_act_kern_busy(0),
       num_densemm(-1), num_sparsemm(-1),
+
       inst_offset_idx(0), psum_offset_idx(0), densemm_offset_idx(0), sparsemm_offset_idx(0),
       ctrl_(ctrl)
 {
@@ -294,13 +305,14 @@ PNM::PNM(int channel, const Config &config, const Timing &timing,
     
     //for diffprune
     //up to 8/256 = 3.125% density is the same complexity
-    req_num_inst_act_buf = 4096;
-    req_num_inst_wgt_buf = 82;
+    req_num_inst_act_buf = 4096*16;
+    req_num_inst_wgt_buf = 82*8;
     
     kern_num_sp_elements = 82;
     
     //required number of delta activation numbers to multiply with 256x128 weight
-    req_num_delta_act = int(256*128*0.2/8) * 8; //6552numbers, requires 819 instructions. 8 CSR numbers per instruction
+    //req_num_delta_act = int(256*128*0.2/8) * 8; //6552numbers, requires 819 instructions. 8 CSR numbers per instruction
+    req_num_delta_act = 1638*8;//13104
 
     spgemm_input_act_buf = new float[req_num_inst_act_buf];
     spgemm_input_wgt_buf = new float[req_num_inst_wgt_buf];
@@ -372,6 +384,10 @@ void PNM::ClockTick() {
         if(!sparse_.empty()){
             //printf("clock: %lu, execute sparsematmul\n", clk_);
             ExecuteSparseMatmul();
+        }
+
+        if(!delta_act_.empty()){
+            ExecuteDeltaActMatMul();
         }
 
         hardware_clk_++;
@@ -1189,12 +1205,54 @@ bool PNM::ReturnDataReady() {
         
         //if diffprune, blocksize = 1
         else if(inst->opcode == Opcode::SPARSE && config_.sparsemm_blk_size == 1){
-            printf("[RETURN DATA READY] diffprune\n");
+            //printf("[RETURN DATA READY] diffprune\n");
             if(sparse_.size() == (uint64_t)num_blocksp_kernels){
                 printf("[RETURN DATA READY] all %u sparse_ filled, skip\n", num_blocksp_kernels);
+                break;
             }
 
-            //TODO: re write logic that adds to buffer for DIFFPRUNE
+            //if activation (dense)
+            if(inst->cache_hit == 0){
+                if(spgemm_input_act_idx != req_num_inst_act_buf){
+                    if(sparse_.size() == 1){
+                        printf("[RETURN DATA READY] filling second sparse_ act (diffprune) buffer\n");
+                    }
+                    printf("[RETURN DATA READY] activation addr: 0x%lx, adding to idx: %u, weight idx: %u\n",
+                    inst->hex_addr, spgemm_input_act_idx, spgemm_input_wgt_idx);
+
+                    spgemm_input_act_idx += config_.sparsemm_feature_size;
+
+                    inst = act_return_queue_.erase(inst);
+
+                    num_inst_added++;
+                }
+                else{
+                    inst++;
+                }
+            }
+            
+            //if weight (sparse, in CSR format)
+            else if(inst->cache_hit == 1){
+                if(spgemm_input_wgt_idx != req_num_inst_wgt_buf){
+                    if(sparse_.size() == 1){
+                        printf("[RETURN DATA READY] filling second sparse_ wgt (diffprune) buffer\n");
+                    }
+                    printf("[RETURN DATA READY] weight addr: 0x%lx, adding to idx: %u, act idx: %u\n",
+                    inst->hex_addr, spgemm_input_wgt_idx, spgemm_input_act_idx);
+
+                    //increase by half since weights in CSR format
+                    spgemm_input_wgt_idx+= config_.sparsemm_feature_size/2;
+
+                    inst = return_queue_.erase(inst);
+
+                    num_inst_added++;
+                }
+                else{
+                    inst++;
+                }
+            }
+
+            //OLD logic to add to buffers
             /*
             if(spgemm_input_act_idx != req_num_inst_act_buf || spgemm_input_wgt_idx != req_num_inst_wgt_buf){
                 if(inst->cache_hit == 0){//if activation
@@ -1241,16 +1299,16 @@ bool PNM::ReturnDataReady() {
         //delta activation
         else if(inst->opcode == Opcode::ACTIVATION){
             //if data is activation
-            if(dense_.size() == 2){
+            if(delta_act_.size() == 2){
                 printf("[RETURN DATA READY] dense_ buffer filled up\n");
                 break;
             }
 
-            //sparse activations, thats why 1638 (20% dense 256x256 tile has 1638 elements)
+            //sparse activations, req_num_delta_act = 1638*8 (number of CSR elements in 20% dense tile)
             if(inst->cache_hit == 0){
                 if(sys_arr_input_act_idx != req_num_delta_act){
                     if(dense_.size() == 1){
-                        printf("[RETURN DATA READY] filling second dense_ buffer while sys array is running\n");
+                        printf("[RETURN DATA READY] filling second delta_act_ buffer while sys array is running\n");
                     }
                     printf("[RETURN DATA READY] DELTA_ACT inst addr: 0x%lx\n", inst->hex_addr);
                     printf("[RETURN DATA READY] adding activation to idx: %u, weight idx: %u\n", 
@@ -1272,11 +1330,11 @@ bool PNM::ReturnDataReady() {
 
             //delta act has dense weights
             else if(inst->cache_hit == 1){
-                if(sys_arr_input_wgt_idx != 256 * 128){
+                if(sys_arr_input_wgt_idx != 256 * 256){
                     if(dense_.size() == 1){
                         printf("[RETURN DATA READY] filling second dense_ buffer while sys array is running\n");
                     }
-                    printf("[RETURN DATA READY] DENSE inst addr: 0x%lx\n", inst->hex_addr);
+                    printf("[RETURN DATA READY] DELTA_ACT inst addr: 0x%lx\n", inst->hex_addr);
                     printf("[RETURN DATA READY] adding weight to idx: %u, activation idx: %u\n", 
                     sys_arr_input_wgt_idx, sys_arr_input_act_idx);
                     sys_arr_input_wgt_idx += config_.densemm_feature_size;
@@ -1292,15 +1350,15 @@ bool PNM::ReturnDataReady() {
                 }
             }
         
-            if(sys_arr_input_act_idx == req_num_delta_act && sys_arr_input_wgt_idx == 256*128){
-                printf("[RETURN DATA READY] both buffers filled, making denseMatmulElement and adding to dense_\n");
+            if(sys_arr_input_act_idx == req_num_delta_act && sys_arr_input_wgt_idx == 256*256){
+                printf("[RETURN DATA READY] both buffers filled, making DeltaActMatmulElement and adding to delta_act_\n");
                 printf("[RETURN DATA READY] hardware clk: %lu\n", hardware_clk_);
-                DenseMatmulElement element = DenseMatmulElement(
+                DeltaActMatmulElement element = DeltaActMatmulElement(
                     inst->densemm_idx,
                     sys_arr_input_act_buf,
                     sys_arr_input_wgt_buf
                 );
-                dense_.push_back(element);
+                delta_act_.push_back(element);
 
                 sys_arr_input_act_idx = 0;
                 sys_arr_input_wgt_idx = 0;
@@ -1405,7 +1463,8 @@ void PNM::ExecuteSparseMatmul(){
     }
     //if diffprune
     else{
-        sparse_kern_end_clk[selected_kernel] = hardware_clk_ + kern_num_sp_elements;
+        sparse_kern_end_clk[selected_kernel] = hardware_clk_ + std::ceil((256*config_.weight_density*0.01)*(256/config_.delta_wgt_parallel_row));
+        //printf("[EXECUTE SPARSEMATMUL] diffprune endclock: %d\n", sparse_kern_end_clk[selected_kernel]);
     }
     sparse_kern_busy_cnt[selected_kernel]++;
 
@@ -1464,7 +1523,7 @@ void PNM::ExecuteSparseMatmul(){
         num_sparsemm += 32;
     }
     else if(config_.sparsemm_blk_size == 1){
-        num_sparsemm += req_num_inst_act_buf + req_num_inst_wgt_buf;
+        num_sparsemm += 4096 + std::ceil(256*256*(config_.weight_density*0.01)/8);
     }
     else{
         num_sparsemm = 0;
@@ -1509,6 +1568,61 @@ void PNM::ExecuteSparseMatmul(){
 
     }
 
+}
+
+void PNM::ExecuteDeltaActMatMul(){
+    auto delta_act_it = delta_act_.begin();
+
+    if(delta_act_kern_busy){
+        if(hardware_clk_ >= (uint64_t)delta_act_kern_end_clk){
+            printf("[EXECUTE DELTA ACT] delta act kernel finished\n");
+            delta_act_kern_busy = false;
+            delta_act_.erase(delta_act_it);
+        }
+        else{
+            hardware_busy_clk_cnt++;
+            printf("[EXECUTE DELTA ACT] delta act kernel busy\n");
+        }
+        return;
+    }
+    
+    //update kernel status 
+    delta_act_kern_busy = true;
+    delta_act_kern_start_clk = hardware_clk_;
+    //52 nz element per row of sparse matrix
+    //compute delta_act_parallel_row rows in parallel
+    //total 256*32=8192 multipliers, takes 416 cycles
+    delta_act_kern_end_clk = hardware_clk_ + (52*(256/config_.delta_act_parallel_row));
+    hardware_busy_clk_cnt++;
+
+    //write result to buffer
+    //don't bother
+
+    //every [256x256] * [256x256] : 4096 weights trans, 1638 act trans
+    num_sparsemm += (4096+1638);
+
+    printf("[EXECUTE DELTA ACT] num_sparsemm/num_read_inst: %u/%u\n",
+    num_sparsemm, num_read_inst);
+
+    if(num_sparsemm == num_read_inst){
+        printf("FINISHED chnnel: %u\n", channel_id_);
+        num_accum = -1;
+        num_densemm = -1;
+        num_sparsemm = -1;
+        num_read_inst = -1;
+        sls_exec = false;
+        end_clk = hardware_clk_;
+
+        float utilization = 100 * ((double)hardware_busy_clk_cnt)/(end_clk - start_clk);
+        printf("hardware busy clk cnt: %u\n", hardware_busy_clk_cnt);
+        printf("percent hardware utilization: %f\n", utilization);
+        printf("start clk: %u, end clk: %u, hardware busy clk cnt : %u\n",
+        start_clk, end_clk, hardware_busy_clk_cnt);
+
+        std::vector<double>utils;
+        utils.push_back(utilization);
+        PrintUtilStats(utils);
+    }
 }
 
 void PNM::ExecuteDenseMatmul(){

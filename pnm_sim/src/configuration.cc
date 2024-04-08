@@ -138,11 +138,13 @@ void Config::InitDRAMParams() {
 //////////////////////////////////////////////////////////////////////
     //dram system : pnm clock ratio
     clk_ratio                   = 20;
+    //sys_array_side_length       = 128; //128x128 systolic array for denseMM
 //////////////////////////////////////////////////////////////////////
 
 //////////////////////////////////////////////////////////////////////
     //determines if block32, block16, or diffprune
 //////////////////////////////////////////////////////////////////////
+
     //for BLOCK32
     //sparsemm_blk_size           = 32;
     //num_blocksp_kernels         = 12;
@@ -152,11 +154,16 @@ void Config::InitDRAMParams() {
     //num_blocksp_kernels         = 30;
 
     //for DIFFPRUNE
-    //sparsemm_blk_size         = 1;
-    //num_blocksp_kernels       = 3;
+    sparsemm_blk_size           = 1;
+    num_blocksp_kernels         = 1;
+    delta_wgt_parallel_row      = 32;
 
     //for DENSE
-    num_blocksp_kernels         = 1;
+    //num_blocksp_kernels         = 1;
+
+    //for DELTA_ACT
+    delta_act_parallel_row      = 16; //compute 32 rows in parallel
+
 ///////////////////////////////////////////////////////////////////////
 
 
@@ -175,8 +182,8 @@ void Config::InitDRAMParams() {
     //DIFFPRUNE
     //num_spgemm_kernels          = 10;
     activation_sparse           = false;
-    //not used
-    weight_density              = 1;//if activation is sparse, weight is dense
+    weight_density              = 1;//given in percent
+    
 
 
     //matmul general

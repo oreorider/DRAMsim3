@@ -16,11 +16,11 @@ configs="$(python3 parse_configs_for_trace_gen.py ${config_file})"
 params="
     --opcode 3
     --nepochs 1
-    --batch_size 4
+    --batch_size 1
     --base_only false
     --file_name test
     --act_dim 512-768
-    --weight_dim 768-768
+    --weight_dim 768-3072
     --tile_size 256
     --density 20
 "

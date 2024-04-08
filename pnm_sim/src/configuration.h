@@ -138,6 +138,7 @@ class Config {
     //DRAM clk : pnm clk ratio
     int clk_ratio;
     //DenseMM
+    int sys_array_size_length;
     int densemm_buffer_size;    //default: 
     int densemm_feature_size;   //default: 
     bool densemm_double;        //default: false
@@ -150,6 +151,10 @@ class Config {
     int num_spgemm_kernels;
     bool activation_sparse;
     float weight_density;
+    //DeltaActMM
+    int delta_act_parallel_row;
+    //DeltaWgtMM
+    int delta_wgt_parallel_row;
     //general mm
     int mm_sidelength;
 

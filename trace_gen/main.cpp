@@ -376,92 +376,79 @@ int main(int argc, const char* argv[])
             unsigned num_batches = config->batch_list.back();
             int num_inst_per_sp_tile = config->inst_tile_info["sparse"];
             int num_inst_per_dense_tile = config->inst_tile_info["dense"];
+            //int num_inst_in_tile = num_inst_per_sp_tile + num_inst_per_dense_tile;
+            unsigned num_inst_per_batch = config->indices[0][0][0].size();
 
             int output_idx;
             //0 for activation, 1 for weight
-            int act_or_wgt = 0;
+            bool is_weight = false;
 
             printf("DIFFPRUNE instructions\n");
             for(int epoch = 0; epoch < config->nepochs; epoch++){
                 for(auto ch: config->channel){
-                    printf("channel: %u\n", ch);
+                    for(auto num_inst : config->num_inst){
+                        printf("channel: %u\n", ch);
 
-                    for(auto num_inst: config->num_inst){
-                        inst->init(
-                        Address(
-                            ch,
-                            true,
-                            PNM_INST_BUF_START,
-                            config
-                            ).GetPNMAddress(),
-                        Address(
-                            ch,
-                            true,
-                            PNM_CONFIG_REG_START + PNM_EXE_REG_OFFSET,
-                            config).GetHexAddress(),
-                        num_inst
-                        );
-                        for(int tiledMultCount = 0; tiledMultCount < numTiledMult; tiledMultCount++){
-                            printf("tiledMultCount: %u\n", tiledMultCount);
-                            for(unsigned b_id = 0; b_id < num_batches; b_id++){
-                                //if batch = 0 (activations)
-                                if(b_id == 0) act_or_wgt = 0;
-                                //if batch = 1 (weights)
-                                else act_or_wgt = 1;
+                        for(auto num_inst: config->num_inst){
+                            inst->init(
+                            Address(
+                                ch,
+                                true,
+                                PNM_INST_BUF_START,
+                                config
+                                ).GetPNMAddress(),
+                            Address(
+                                ch,
+                                true,
+                                PNM_CONFIG_REG_START + PNM_EXE_REG_OFFSET,
+                                config).GetHexAddress(),
+                            num_inst
+                            );
+                            for(int tiledMultCount = 0; tiledMultCount < numTiledMult; tiledMultCount++){
+                                printf("tiledMultCount: %u\n", tiledMultCount);
+                                for(unsigned b_id = 0; b_id < num_batches; b_id++){
+                                    int num_weights = 0;
+                                    int num_activations = 0;
+                                    //printf("batch_id: %u, num inst written: %u\n", b_id, num_inst_in_tile);
+                                    for(int ll = 0; ll < num_inst_per_batch; ll++){
+                                        addr -> reset(
+                                            ch,
+                                            (config->indices[epoch][tiledMultCount]
+                                            [b_id][ll]) * config->data_size,
+                                            config
+                                        );
 
-                                int num_inst_in_tile = 0;
-                                //if activations are sparse
-                                if(config->activation_sparse == 1){
-                                    //if b_id = 0 (activations, and activations are sparse)
-                                    if(b_id == 0){
-                                        num_inst_in_tile = num_inst_per_sp_tile;
-                                    }
+                                        write_base(
+                                            config,
+                                            addr->GetHexAddress(),
+                                            b_time
+                                        );
 
-                                    //if b_id = 1 (weights, and weights are dense)
-                                    else if(b_id == 1){
-                                        num_inst_in_tile = num_inst_per_dense_tile;
-                                    }
+                                        //one day, change this to be functionally correct
+                                        output_idx = 0;
+                                        
+                                        //trace: weight -> act -> ... -> weight -> act -> act -> act
+                                        if(ll < num_inst_per_sp_tile*2 && ll%2==0){
+                                            is_weight = true;
+                                            num_weights++;
+                                        }
+                                        else{
+                                            is_weight = false;
+                                            num_activations++;
+                                        }
+
+                                        inst->write_instruction(
+                                            config->opcode,
+                                            //b_id also works (0 for activation, 1 for weight)
+                                            is_weight,
+                                            output_idx,
+                                            addr,
+                                            config->cxlpnm_out,
+                                            ax_time
+                                        );
+                                    }       
+                                    printf("num weights: %u, num activations: %u\n", num_weights, num_activations);                 
                                 }
-                                //
-                                else if(config->activation_sparse == 0){
-                                    //if b_id = 0 (activations, and activations are dense)
-                                    if(b_id == 0){
-                                        num_inst_in_tile = num_inst_per_dense_tile;
-                                    }
-                                    //if b_id = 1 (weights, and weights are sparse)
-                                    else if(b_id == 1){
-                                        num_inst_in_tile = num_inst_per_sp_tile;
-                                    }
-                                }
-                                printf("batch_id: %u, num inst written: %u\n", b_id, num_inst_in_tile);
-                                for(int ll = 0; ll < num_inst_in_tile; ll++){
-                                    
-                                    addr -> reset(
-                                        ch,
-                                        (config->indices[epoch][tiledMultCount]
-                                        [b_id][ll]) * config->data_size,
-                                        config
-                                    );
-
-                                    write_base(
-                                        config,
-                                        addr->GetHexAddress(),
-                                        b_time
-                                    );
-
-                                    //one day, change this to be functionally correct
-                                    output_idx = 0;
-
-                                    inst->write_instruction(
-                                        config->opcode,
-                                        //b_id also works (0 for activation, 1 for weight)
-                                        act_or_wgt,
-                                        output_idx,
-                                        addr,
-                                        config->cxlpnm_out,
-                                        ax_time
-                                    );
-                                }                        
                             }
                         }
                     }
@@ -631,6 +618,7 @@ int main(int argc, const char* argv[])
                     for(int tiledMultCount = 0; tiledMultCount < numTiledMult; tiledMultCount++){
                         for(unsigned b_id = 0; b_id < num_batches; b_id++){
                             int num_weights = 0;
+                            int num_activations = 0;
                             for(unsigned ll = 0; ll < num_inst_per_batch; ll++){
                                 addr -> reset(
                                     ch,
@@ -648,9 +636,9 @@ int main(int argc, const char* argv[])
                                 output_idx = 0;
 
                                 //activation -- if less than 1638th number and is odd index
-                                if(ll < 1638 && ll%2==1){
+                                if(ll < 1638*2 && ll%2==1){
                                     is_weight = false;
-                                    
+                                    num_activations++;
                                 }
                                 else{
                                     is_weight = true;
@@ -667,7 +655,7 @@ int main(int argc, const char* argv[])
                                 );
 
                             }
-                            printf("num weights: %u\n", num_weights);
+                            printf("num weights: %u, num activations: %u\n", num_weights, num_activations);
                         }
                     }
                 }

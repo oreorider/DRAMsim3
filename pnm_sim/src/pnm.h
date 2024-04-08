@@ -204,6 +204,17 @@ class SparseMatmulElement{
     float* sparsemm_wgt;
 };
 
+class DeltaActMatmulElement{
+  public: 
+    DeltaActMatmulElement(): sparsemm_idx(-1), sparsemm_act(NULL), sparsemm_wgt(NULL){}
+    DeltaActMatmulElement(int idx, float* a, float* b):
+      sparsemm_idx(idx), sparsemm_act(a), sparsemm_wgt(b){}
+    
+    int sparsemm_idx;
+    float* sparsemm_act;
+    float* sparsemm_wgt;
+};
+
 class PNM {
   public:
     PNM(int channel, const Config &config, const Timing &timing,
@@ -230,7 +241,7 @@ class PNM {
     std::vector<AdderElement> adder_;
     std::vector<DenseMatmulElement> dense_;
     std::vector<SparseMatmulElement> sparse_;
-    std::vector<DenseMatmulElement> delta_act_;
+    std::vector<DeltaActMatmulElement> delta_act_;
 
     std::vector<float*> input_cache_;
 
@@ -297,18 +308,25 @@ class PNM {
     int program_count, num_write_inst, num_read_inst, num_accum;
     int add_to_buf_cnt;
 
-    int start_clk;
-    int hardware_busy_clk_cnt;
-    int end_clk;
+    //sys array status signals for densemm
     int sys_array_start_clk;
     int sys_array_end_clk;
 
+    //delta act kernel status signals
+    int delta_act_kern_start_clk;
+    int delta_act_kern_end_clk;
+
+
+    int start_clk;
+    int end_clk;
+    int hardware_busy_clk_cnt;
     int cycles_stalled;
 
 
     //used to show which iteration of matmul we are on
     //from 0 ~ 15
     int sys_array_busy;
+    int delta_act_kern_busy;
     int num_densemm, num_sparsemm;
 
     // offset choose instruction or psum
@@ -333,6 +351,8 @@ class PNM {
     void ExecuteAdder();
     void ExecuteDenseMatmul();
     void ExecuteSparseMatmul();
+    //finegrain sparse matmul
+    void ExecuteDeltaActMatMul();
 
     int inst_offset_idx, psum_offset_idx, densemm_offset_idx, sparsemm_offset_idx;
     std::vector<uint64_t> write_instruction_offset;

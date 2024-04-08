@@ -13,7 +13,7 @@ configs="$(python3 parse_configs_for_trace_gen.py ${config_file})"
 
 # Parameters
 params="
-    --opcode 3
+    --opcode 2
     --nepochs 1
     --batch_size 1
     --embedding_table 1000000-1000000
@@ -24,11 +24,11 @@ params="
     --miss_ratio 100
     --base_only false
     --file_name test
-    --act_dim 256-512
-    --weight_dim 512-512
+    --act_dim 512-768
+    --weight_dim 768-768
     --tile_size 256
-    --blk_size 32
-    --density 20
+    --blk_size 1
+    --density 1
 "
 
 #block sparse
